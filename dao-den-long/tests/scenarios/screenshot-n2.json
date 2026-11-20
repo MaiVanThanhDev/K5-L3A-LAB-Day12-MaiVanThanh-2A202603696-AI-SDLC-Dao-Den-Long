@@ -1,0 +1,1 @@
+{"player": {"pos": [22, 0, 2], "carried": 6}, "lanterns": [{"id": "L1", "lit": true}, {"id": "L2", "deposited": 6}], "drifters": [{"id": "D1", "pos": [27, 1.5, 7]}], "shades": [{"id": "S1", "pos": [12, 1, 14], "state": "wander"}], "random_shades": false, "time_left_s": 250}

@@ -1,0 +1,1 @@
+{"player": {"pos": [0, 0, -22], "carried": 5}, "lanterns": [{"id": "L4", "lit": true}, {"id": "L6", "lit": true}], "shades": [{"id": "S1", "pos": [-6, 1, -12], "state": "wander"}, {"id": "S2", "pos": [7, 1, -10], "state": "stunned", "state_ticks_left": 600}], "drifters": [{"id": "D1", "pos": [3, 1.5, -15]}], "random_shades": false, "time_left_s": 300}
