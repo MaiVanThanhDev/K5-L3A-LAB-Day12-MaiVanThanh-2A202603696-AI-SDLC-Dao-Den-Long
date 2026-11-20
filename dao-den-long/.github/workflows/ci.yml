@@ -1,0 +1,21 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm test
+      - name: Headless smoke + determinism
+        run: |
+          node src/headless.js --seed 9 --night 1 --ticks 3000 --out a.jsonl
+          node src/headless.js --seed 9 --night 1 --ticks 3000 --out b.jsonl
+          cmp a.jsonl b.jsonl
+          tail -1 a.jsonl
