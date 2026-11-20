@@ -48,7 +48,9 @@ Tác giả: Mai Văn Thành (2A202603696) · Công cụ: Claude Code (Opus 5.5) 
 
 ## 5. Token và chi phí AI
 
-- Một phiên Claude Code dài cho cả 4 phase, nhiều lần tóm tắt ngữ cảnh. **Ước tính thô** (không có số đo chính xác trong phiên): khoảng 10–15 triệu token đầu vào (phần lớn là ngữ cảnh được cache) và khoảng 0.3–0.4 triệu token đầu ra. **Số thật cần lấy từ `/cost` của Claude Code hoặc trang usage của tài khoản** và điền vào đây trước khi nộp.
+- **Số đo thật:** dùng gói Claude theo thuê bao (Claude Code trong VS Code, model Opus 5.5). Gói này không hiện số token, chỉ hiện phần trăm hạn mức: **đã dùng 96 % hạn mức** (đọc ngày 2026-11-20, sau Phase 4 và phần nâng cấp giao diện). Chi phí tiền: phí thuê bao cố định, không tính theo token.
+- **Ước tính token** (không có số đo chính xác): một phiên dài cho cả 4 phase, nhiều lần tóm tắt ngữ cảnh. Khoảng 10–15 triệu token đầu vào (phần lớn là ngữ cảnh được cache) và khoảng 0.3–0.4 triệu token đầu ra.
+- **Nhận xét:** 96 % hạn mức cho thấy phiên này tiêu tốn nhiều. Phần tốn nhất là các vòng lặp ít giá trị: tối ưu bot e2e (Phase 2–3, không thắng được), chạy bench nhiều lần để so sánh A/B, và mỗi lần đọc lại file lớn như `web/main.js`.
 - **Cách đã tiết kiệm:** sửa file bằng script/`Edit` có chỗ neo thay vì viết lại cả file; đọc file theo đoạn (`offset/limit`); chạy test với reporter TAP rồi `grep` chỉ dòng lỗi; ảnh chụp chỉ mở những ảnh cần kiểm tra; không dùng subagent; dừng việc tối ưu bot khi lợi ích thấp.
 
 ## 6. Nếu làm lại
