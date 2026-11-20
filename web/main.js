@@ -869,6 +869,7 @@ newGame(Number(params.get('night')) || 1);
 if (params.has('fps')) $('fps').classList.remove('hidden');
 if (BENCH) $('minimap').classList.add('hidden');
 window.__showIntro = showIntro; // used by scripts/screens.js
+window.__game = () => game; // debugging / scripted checks
 if (params.has('cb')) settings.colorblind = true;
 if (params.has('large')) settings.largeText = true;
 applyColorblind();

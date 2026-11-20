@@ -155,7 +155,7 @@ export function decorations(C, spots, avoid) {
   const leafMats = [0x24493f, 0x2c574a, 0x346353].map((c) => nearFade(new THREE.MeshLambertMaterial({ color: c, flatShading: true })));
   inst(trunkG, nearFade(new THREE.MeshLambertMaterial({ color: C.wood })), trees, (t) => { V.set(t.x, 0, t.z); Q.setFromAxisAngle(up, t.rot); S.setScalar(t.s); });
   leafG.forEach((lg, k) => inst(lg, leafMats[k], trees, (t) => { V.set(t.x, 0, t.z); Q.setFromAxisAngle(up, t.rot + k); S.setScalar(t.s); }));
-  for (const t of trees) colliders.push({ x: t.x, z: t.z, r: 0.35 * t.s, h: 4 * t.s });
+  for (const t of trees) colliders.push({ x: t.x, z: t.z, r: 0.6 * t.s, h: 4 * t.s }); // trunk + lowest canopy
   const rockG = new THREE.DodecahedronGeometry(0.6, 0);
   inst(rockG, new THREE.MeshLambertMaterial({ color: C.stone, flatShading: true }), rocks, (r) => { V.set(r.x, 0.1 * r.s, r.z); Q.setFromAxisAngle(up, r.rot); S.set(r.s * 1.2, r.s * 0.8, r.s); });
   for (const r of rocks) colliders.push({ x: r.x, z: r.z, r: 0.55 * r.s, h: 0.75 * r.s });

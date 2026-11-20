@@ -2,6 +2,17 @@
 
 Ghi theo phase (tag git). Mục **BREAKING** liệt kê thay đổi phá vỡ tương thích với contract, scenario, output headless hoặc test của phase trước.
 
+## [Unreleased] — nhánh `ui-upgrade` (sau v1.0.0, không thuộc bài nộp)
+
+Không đổi luật, số liệu, contract hay đầu ra headless (70/70 case; 69 case cũ không đổi). Bằng chứng: [docs/proof/ui-upgrade/](docs/proof/ui-upgrade/).
+
+- **Đồ họa 3D** (`web/scenery.js`): bầu trời có dải màu, trăng có quầng, sao lấp lánh; biển mây trôi (nhiễu tính theo đỉnh); đảo có vách đá lởm chởm, đáy nhọn, mặt cỏ loang màu; cây nhiều tầng, đá, cỏ (instancing); đom đóm trang trí bay lượn; bóng tiếp đất cho Mây và Bóng Mực; quầng sáng và vũng sáng quanh đèn; tán lá gần camera mờ dần (dither) để không che Mây.
+- **Nhân vật Mây** (`web/may.js`): tạo hình gốc mới, vẫn đội nón lá treo đèn lồng nhỏ, áo trắng ngà, khăn đỏ; tay chân có khớp; hoạt ảnh chạy, nhảy, lướt (vệt sáng), đèn lồng đung đưa, khăn bay theo tốc độ.
+- **Va chạm đá và cây**: vật cản chỉ có ở client (`Game({ obstacles })`); Mây bị chặn và trượt dọc; đá thấp nhảy qua được; cây cối tránh xa đèn, điểm sinh, bục nhảy, cầu và dốc. Headless không truyền vật cản. Case R8.
+- **Menu và màn hình**: khối tiêu đề có logo đèn lồng, nút có icon, 3 thẻ Đêm (đánh dấu Đêm đã thắng kèm điểm), phần điều khiển gập được, camera bay vòng quanh đảo phía sau menu; màn giới thiệu kiểu chương truyện, mục tiêu dạng chip; hiệu ứng chuyển màn (tắt khi giảm chuyển động).
+- **HUD**: panel kính tối viền vàng; đồng hồ kèm vòng tiến độ Đêm; bảng trạng thái từng đèn (thanh dầu hoặc tiến độ nạp, nhấp nháy khi < 30); hồi chiêu dạng vòng quét; bản đồ nhỏ xoay theo camera.
+- **Hiệu năng**: trời và biển vẽ sau vật thể đục (early-z), bản đồ nhỏ tắt trong cảnh bench (UI sáng tạo). Bench trên UHD 620: 116.4 FPS / 1 % low 30.2 (bản v1.0.0 đo xen kẽ cùng lúc: 118–120 / 28–33). Chơi thật: 51–54 FPS (vsync).
+
 ## [phase-4] / v1.0.0 — Ticket-04 "Bình minh: phát hành v1.0.0" · Test Contract v1.3
 
 Spec: [docs/spec/phase-4.md](docs/spec/phase-4.md) · Bằng chứng: [docs/proof/phase-4/](docs/proof/phase-4/) · Retro: [docs/notes/retro.md](docs/notes/retro.md)

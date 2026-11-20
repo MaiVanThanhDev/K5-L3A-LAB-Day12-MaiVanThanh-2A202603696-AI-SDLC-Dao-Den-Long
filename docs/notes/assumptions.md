@@ -123,3 +123,4 @@ Quyết định thiết kế: [ADR 0001](../adr/0001-lantern-fuel-and-dawn-win.m
 | D13 | Tên tiếng Việt | Chấp nhận chữ Unicode (`\p{L}`, dấu kết hợp) + số + `_`, độ dài 3–12 ký tự sau chuẩn hóa NFC. |
 | D14 | Đổi phím | Một phím chính cho mỗi hành động; trùng phím vẫn lưu nhưng tô đỏ và hiện cảnh báo. `Esc` luôn tạm dừng (trình duyệt dùng Esc để nhả chuột). Chuột trái vẫn là phím phụ cho Tỏa Sáng. |
 | D15 | Video demo | Cần người chơi thật quay màn hình. AI không quay được (không có thiết bị ghi, không có ffmpeg). |
+| D16 | (nhánh ui-upgrade) Va chạm đá và cây | Đá và cây là trang trí sáng tạo nên chỉ chặn Mây ở client: client truyền `obstacles` vào `Game`, headless không truyền nên đầu ra contract không đổi. Mây (bán kính 0.4 m) bị đẩy ra khỏi vòng tròn vật cản; nhảy qua được khi chân cao hơn vật cản (đá thấp). Bóng Mực và Gió Lạc không bị chặn (chúng bay). |
