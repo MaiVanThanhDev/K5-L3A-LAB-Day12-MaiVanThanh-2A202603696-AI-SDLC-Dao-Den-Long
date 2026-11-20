@@ -15,7 +15,9 @@ jobs:
       - run: npm test
       - name: Headless smoke + determinism
         run: |
-          node src/headless.js --seed 9 --night 1 --ticks 3000 --out a.jsonl
-          node src/headless.js --seed 9 --night 1 --ticks 3000 --out b.jsonl
-          cmp a.jsonl b.jsonl
-          tail -1 a.jsonl
+          for n in 1 2 3; do
+            node src/headless.js --seed 9 --night $n --ticks 3000 --out a$n.jsonl
+            node src/headless.js --seed 9 --night $n --ticks 3000 --out b$n.jsonl
+            cmp a$n.jsonl b$n.jsonl
+            tail -1 a$n.jsonl
+          done

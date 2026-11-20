@@ -1,0 +1,30 @@
+[
+  {
+    "name": "Đêm 1",
+    "avg_fps": 57.4,
+    "samples": 14,
+    "viewport": "1280×720",
+    "gpu": "ANGLE (Intel, Intel(R) UHD Graphics 620 (0x00003EA0) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  {
+    "name": "Đêm 2",
+    "avg_fps": 58.4,
+    "samples": 14,
+    "viewport": "1280×720",
+    "gpu": "ANGLE (Intel, Intel(R) UHD Graphics 620 (0x00003EA0) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  {
+    "name": "Đêm 3",
+    "avg_fps": 58.2,
+    "samples": 14,
+    "viewport": "1280×720",
+    "gpu": "ANGLE (Intel, Intel(R) UHD Graphics 620 (0x00003EA0) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  {
+    "name": "Đêm 3, 6/7 đèn sáng (nhiều đèn nhất)",
+    "avg_fps": 58.5,
+    "samples": 14,
+    "viewport": "1280×720",
+    "gpu": "ANGLE (Intel, Intel(R) UHD Graphics 620 (0x00003EA0) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  }
+]
