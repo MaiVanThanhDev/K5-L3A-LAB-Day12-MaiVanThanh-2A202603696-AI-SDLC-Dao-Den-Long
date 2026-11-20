@@ -80,3 +80,24 @@ Spec và tiêu chí nghiệm thu: [docs/spec/phase-2.md](../spec/phase-2.md). D�
 | G13 | Bóng bắt đầu cách 10 m (trước: 20 m) | bỏ đuổi ở > 18 m |
 | G14 | Lịch sinh 2 con ở tick 300, rồi mỗi 480 tick, tối đa 6; 20 đom đóm lúc đầu | lịch sinh chuẩn |
 | G16 | Bỏ phần "bị chặn ở mép đảo" (chuyển sang P17) | `fall_enabled = true` |
+
+## Phase 3 — Ticket-03 "Đèn cạn dầu" + Test Contract v1.2
+
+Quyết định thiết kế: [ADR 0001](../adr/0001-lantern-fuel-and-dawn-win.md). Breaking changes và lý do sửa từng test: [CHANGELOG.md](../../CHANGELOG.md).
+
+### C. Chỗ Ticket-03 mơ hồ → giả định
+
+| # | Chỗ mơ hồ | Giả định |
+|---|---|---|
+| C1 | Thứ tự trừ dầu khi nhiều con hút | Bước 2: mọi đèn sáng hao 1 FU trước, rồi các con đang `drain` (trạng thái lúc đầu tick) hút 5 FU theo id tăng dần. `fuel_drain` ghi fuel ngay sau phần hút của con đó (con sau ghi số nhỏ hơn). |
+| C2 | Tốc độ Bóng Mực khi đi tới đèn | `shade_speed` (4.0; Đêm 3 4.5). Dừng cách đèn 1 m (trong tầm hút 2 m). Ở đèn tắt thì đứng chờ, vẫn `wander`, vẫn xét phát hiện 12 m. Không có đèn yếu hay đèn tắt nào thì lượn ngẫu nhiên 1.5 m/s như Phase 2. |
+| C3 | Lúc chuyển sang `drain` | Xét ở bước 8 (di chuyển). Con vừa vào tầm 2 m bắt đầu hút từ bước 2 của tick sau. |
+| C4 | "Mây vào trong 6 m" | Khoảng cách XZ, chỉ khi Mây đang hoạt động (không trong 60 tick chờ hồi sinh). |
+| C5 | `target_lantern_id` | Là đích của `wander` khi đèn đó yếu hoặc tắt; còn không thì dùng đích tự tính. Bắt buộc có khi `state: "drain"`. Id không tồn tại → mã 2. |
+| C6 | Châm dầu "lên ≥ 30" | Mỗi lần châm mà fuel sau khi châm ≥ 30, mọi Bóng Mực trong 6 m bị đẩy ra theo luật 30 tick; con đang `drain` về `wander`. |
+| C7 | Đèn đầy dầu | Đèn chỉ thật sự đầy ngay trong tick vừa thắp hoặc châm đầy. Từ tick sau, bước 2 đã hao 1 FU trước bước tương tác, nên bấm tương tác ở đèn "đầy" vẫn châm 1 đom đóm (ceil(0.017/10) = 1) đúng công thức ticket. |
+| C8 | Đèn đặt sẵn `lit: true` | `fuel` mặc định 100, `ever_lit` mặc định true, `deposited` = 10. Không tính vào `successful_lights`, không cộng điểm. |
+| C9 | Điểm bình minh | floor(fuel) dùng fuel sau phần hao của chính tick bình minh. |
+| C10 | "+15 nếu đang drain" | Là **tổng** 15 cho con đó (không phải 5 + 15). |
+| C11 | Mắt Bóng Mực ở chế độ thường | Dùng `#7A3CFF` (cùng màu viền), vì ticket nói "viền và mắt đổi từ #7A3CFF". |
+| C12 | Sức chứa | Chỉ tăng trong một Đêm, nên số đang mang không bao giờ vượt sức chứa. |
