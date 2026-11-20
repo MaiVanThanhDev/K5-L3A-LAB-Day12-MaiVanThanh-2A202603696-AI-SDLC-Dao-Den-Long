@@ -24,6 +24,7 @@ const SHOTS = [
   { name: 'danger-clock-prompt', url: '/?autostart&seed=3&night=1&scenario=/tests/scenarios/screenshot-danger.json', wait: 2500 },
   { name: 'p3-fuel-drain', url: '/?autostart&seed=3&night=1&scenario=/tests/scenarios/screenshot-p3-fuel.json&yaw=10', wait: 1800 },
   { name: 'p3-colorblind', url: '/?autostart&seed=3&night=1&cb&scenario=/tests/scenarios/screenshot-p3-fuel.json&yaw=10', wait: 1800 },
+  { name: 'bench-scene', url: '/?bench&seed=42&duration=60&warmup=3', wait: 5000 },
   { name: 'pause', url: '/?autostart&seed=3&night=2', steps: [[key('Escape'), 800]], wait: 300 },
   { name: 'settings', url: '/?autostart&seed=3&night=2', steps: [[key('KeyP'), 500], [click('btn-pause-settings'), 500]], wait: 300 },
   { name: 'result-lost', url: '/?autostart&seed=3&night=1&scenario=/tests/scenarios/screenshot-lose.json', wait: 3500 },

@@ -29,11 +29,14 @@ const r1 = (x) => { const v = Math.round(x * 10) / 10; return v === 0 ? 0 : v; }
 export class FormatError extends Error {}
 
 export class Game {
-  constructor({ tuning, seed = 0, scenario = null, night = 1 }) {
+  // bench = true (Ticket-04 benchmark scene only, never used by the headless contract): no spawns, damage, pickup,
+  // fuel burn/drain or end of night; shades still move by the normal wander rules.
+  constructor({ tuning, seed = 0, scenario = null, night = 1, bench = false }) {
     const t = (this.t = tuning);
     const map = (this.map = NIGHTS[night]);
     if (!map) throw new FormatError(`night ${night} does not exist`);
     this.night = night;
+    this.bench = !!bench;
     this.rng = mulberry32(seed);
     this.tick = 0;          // contract tick: every step, paused or not
     this.simTick = 0;       // gameplay steps actually simulated
@@ -284,8 +287,8 @@ export class Game {
     for (const c of this.charms) if (!c.available && --c.respawn <= 0) { c.respawn = 0; c.available = true; }
     // fuel: lit lanterns burn 1 FU/tick; each draining shade (state at the start of the tick) sucks 5 FU/tick
     const decay = Math.round((t.fuel_decay_per_s * FU) / TICK_HZ), drain = Math.round((t.drain_per_s * FU) / TICK_HZ);
-    for (const L of this.lanterns) if (L.lit) L.fuel -= decay;
-    for (const s of [...this.shades].sort(byId)) {
+    if (!this.bench) for (const L of this.lanterns) if (L.lit) L.fuel -= decay;
+    if (!this.bench) for (const s of [...this.shades].sort(byId)) {
       if (s.state !== 'drain') continue;
       const L = this.lanterns.find((l) => l.id === s.drainId);
       if (!L || !L.lit) continue;
@@ -381,7 +384,7 @@ export class Game {
     const active = p.fallWait === 0; // can pick up, interact, pulse, be touched
 
     // 4. pick up motes and charms
-    if (active) {
+    if (active && !this.bench) {
       for (let i = 0; i < this.motes.length && p.carried < this.capacity; ) {
         const m = this.motes[i];
         if (m.from <= st && distXZ(p.pos, m.pos) <= t.pickup_radius && Math.abs(p.pos[1] - m.pos[1]) <= t.pickup_height) {
@@ -528,7 +531,7 @@ export class Game {
         else if (!L || !L.lit || L.fuel >= this.lowFuel || distXZ(s.pos, L.pos) > t.drain_range_m) { s.state = 'wander'; s.drainId = null; }
         else continue; // stands still while draining
       }
-      if (s.state === 'wander' && targetable && d <= t.shade_detect_m) s.state = 'chase';
+      if (s.state === 'wander' && targetable && !this.bench && d <= t.shade_detect_m) s.state = 'chase'; // bench: shades keep wandering
       else if (s.state === 'chase' && (!targetable || d > t.shade_lose_m)) s.state = 'wander';
       const goal = s.state === 'wander' ? this.wanderTarget(s) : null;
       if (s.state === 'chase') {
@@ -577,7 +580,7 @@ export class Game {
     }
 
     // 9. touches: drifters steal first, then at most one shade hit (ids ascending)
-    if (active) {
+    if (active && !this.bench) {
       for (const d of [...this.drifters].sort(byId)) {
         if (d.state !== 'chase' || distXZ(d.pos, p.pos) > t.drifter_touch_m) continue;
         const amount = Math.min(t.drifter_steal, p.carried);
@@ -630,7 +633,7 @@ export class Game {
     }
 
     // 11. win / lose after every update of the tick: no flames always loses first; at dawn win if lit >= ceil(0.6 x total)
-    if (p.flames <= 0) this.finish('lost', 'no_flames');
+    if (this.bench) { /* benchmark scene never ends */ } else if (p.flames <= 0) this.finish('lost', 'no_flames');
     else if (st >= this.dawnTick) {
       const lit = this.lanterns.filter((l) => l.lit);
       if (lit.length >= this.winNeed) {
@@ -653,7 +656,7 @@ export class Game {
     }
     const nearest = (pred) => {
       let best = null, bd = Infinity;
-      for (const L of [...this.lanterns].sort(byId)) { if (!pred(L)) continue; const d = distXZ(s.pos, L.pos); if (d < bd) { best = L; bd = d; } }
+      for (const L of this.lanterns) { if (!pred(L)) continue; const d = distXZ(s.pos, L.pos); if (d < bd) { best = L; bd = d; } } // lanterns are stored in id order
       return best;
     };
     return nearest(weak) || nearest((L) => !L.lit);

@@ -3,10 +3,14 @@
 import * as THREE from 'three';
 import { Game, DT, NIGHTS } from '/src/sim/game.js';
 import { sfx, unlock, setVolume, startMusic, stopMusic } from '/web/audio.js';
+import { benchScenario, benchCamera } from '/src/sim/bench.js';
 
 const contract = await (await fetch('/game.contract.json')).json();
 const T = contract.tuning;
 const params = new URLSearchParams(location.search);
+// Benchmark scene (Ticket-04 §1): ?bench&seed=42&duration=30&warmup=3 — standard scene, no creative extras, scripted camera.
+const BENCH = params.has('bench');
+const benchCfg = { seed: Number(params.get('seed') ?? 42), duration: Number(params.get('duration') ?? 30), warmup: Number(params.get('warmup') ?? 3) };
 
 // ---------- standard palette (Ticket-02) ----------
 const C = {
@@ -19,7 +23,7 @@ const C = {
 const shadeEdgeColor = () => (settings.colorblind ? C.shadeEdgeCB : C.shadeEdge);
 function applyColorblind() {
   document.body.classList.toggle('cb', !!settings.colorblind);
-  for (const v of shadeViews.values()) { v.edgeMat.color.setHex(shadeEdgeColor()); v.eyeMat.color.setHex(shadeEdgeColor()); }
+  if (typeof shadeEyes !== 'undefined') shadeEyes.material.color.setHex(shadeEdgeColor());
 }
 
 // ---------- settings (persisted) ----------
@@ -75,6 +79,7 @@ function island(r, cx = 0, cz = 0, depth = 6) {
   return g;
 }
 function decorate(g, n, rMin, rMax, cx = 0, cz = 0, avoid = () => false) {
+  if (BENCH) return; // creative scenery is off in the standard benchmark scene
   const rock = new THREE.DodecahedronGeometry(0.6), trunk = new THREE.CylinderGeometry(0.12, 0.18, 2.2, 6), leaf = new THREE.ConeGeometry(1.1, 2.2, 7);
   const leafMat = mat(0x24493f);
   for (let i = 0; i < n; i++) {
@@ -210,28 +215,25 @@ const haloTex = (() => {
   x.fillStyle = g; x.fillRect(0, 0, 64, 64);
   return new THREE.CanvasTexture(c);
 })();
-const haloMat = new THREE.SpriteMaterial({ map: haloTex, color: C.moteHalo, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
-function makeMote() {
-  const g = new THREE.Group();
-  g.add(new THREE.Mesh(moteGeo, moteMat));
-  const h = new THREE.Sprite(haloMat); h.scale.setScalar(0.9); g.add(h);
-  scene.add(g); return { g };
-}
-const shadeGeo = new THREE.SphereGeometry(0.9, 18, 12), edgeGeo = new THREE.SphereGeometry(0.98, 18, 12);
-function makeShade() {
-  const g = new THREE.Group();
-  const bodyMat = new THREE.MeshBasicMaterial({ color: C.shadeBody });
-  const blob = new THREE.Mesh(shadeGeo, bodyMat); g.add(blob);
-  const edgeMat = new THREE.MeshBasicMaterial({ color: shadeEdgeColor(), side: THREE.BackSide, transparent: true, opacity: 0.85 });
-  const edge = new THREE.Mesh(edgeGeo, edgeMat); g.add(edge);
-  const eyeMat = new THREE.MeshBasicMaterial({ color: shadeEdgeColor() });
-  for (const sx of [-0.3, 0.3]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), eyeMat);
-    eye.position.set(sx, 0.2, 0.8); g.add(eye);
-  }
-  g.scale.setScalar(0.01);
-  scene.add(g); return { g, bodyMat, edgeMat, eyeMat, blob, edge, born: performance.now() };
-}
+// Shades and motes are drawn with instancing: one draw call per part whatever their number (200 shades in the bench).
+const MAX_SHADES = 256, MAX_MOTES = 192;
+const instanced = (geo, mat, n) => {
+  const m = new THREE.InstancedMesh(geo, mat, n);
+  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; m.count = 0; scene.add(m); return m;
+};
+const moteCores = instanced(moteGeo, moteMat, MAX_MOTES);
+const haloGeo = new THREE.BufferGeometry();
+haloGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_MOTES * 3), 3).setUsage(THREE.DynamicDrawUsage));
+const moteHalos = new THREE.Points(haloGeo, new THREE.PointsMaterial({ map: haloTex, color: C.moteHalo, size: 0.9, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+moteHalos.frustumCulled = false; scene.add(moteHalos);
+const shadeGeo = new THREE.SphereGeometry(0.9, 18, 12), edgeGeo = new THREE.SphereGeometry(0.98, 18, 12), eyeGeo = new THREE.SphereGeometry(0.12, 8, 6);
+const shadeBodies = instanced(shadeGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX_SHADES);
+const shadeEdges = instanced(edgeGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide }), MAX_SHADES);
+const shadeEyes = instanced(eyeGeo, new THREE.MeshBasicMaterial({ color: shadeEdgeColor() }), MAX_SHADES * 2);
+const shadeAnim = new Map(); // id → current display scale (spawn grow-in)
+const _m = new THREE.Matrix4(), _e = new THREE.Matrix4(), _q = new THREE.Quaternion(), _v = new THREE.Vector3(), _s = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
+const _c = new THREE.Color(), _c2 = new THREE.Color();
+const EYE_OFFSETS = [new THREE.Vector3(-0.3, 0.2, 0.8), new THREE.Vector3(0.3, 0.2, 0.8)];
 function makeDrifter() {
   const geo = new THREE.PlaneGeometry(0.5, 2.6, 1, 14);
   const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: C.drifter, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }));
@@ -247,14 +249,15 @@ function makeCharm() {
   const light = new THREE.PointLight(C.scarf, 1.5, 6, 2); g.add(light);
   scene.add(g); return { g };
 }
-const moteViews = new Map(), shadeViews = new Map(), drifterViews = new Map(), charmViews = new Map();
+const drifterViews = new Map(), charmViews = new Map();
 function sync(views, items, make) {
   const seen = new Set();
   for (const it of items) { seen.add(it.id); if (!views.has(it.id)) views.set(it.id, make(it)); }
   for (const [id, v] of views) if (!seen.has(id)) { scene.remove(v.g); views.delete(id); }
 }
 function clearViews() {
-  for (const views of [moteViews, shadeViews, drifterViews, charmViews, lanternViews]) { for (const v of views.values()) scene.remove(v.g); views.clear(); }
+  for (const views of [drifterViews, charmViews, lanternViews]) { for (const v of views.values()) scene.remove(v.g); views.clear(); }
+  shadeAnim.clear(); shadeBodies.count = shadeEdges.count = shadeEyes.count = moteCores.count = 0; haloGeo.setDrawRange(0, 0);
 }
 
 // pulse rings, wind leaves
@@ -290,6 +293,7 @@ document.addEventListener('pointerlockchange', () => { if (!document.pointerLock
 let lockedOnce = false;
 
 function readInput() {
+  if (BENCH) return { move: [0, 0], cam_yaw_deg: 0, jump: false, interact: false, pulse: false, dash: false, pause: false };
   // Contract: move = [x, z], z+ = camera forward. With yaw 0 the camera looks along +Z, so screen-right is world −X.
   let x = 0, z = 0;
   if (keys.has('KeyW') || keys.has('ArrowUp')) z += 1;
@@ -323,7 +327,8 @@ function newGame(n) {
   night = n;
   buildWorld(n);
   const seed = params.has('seed') ? Number(params.get('seed')) : (Date.now() & 0x7fffffff);
-  game = new Game({ tuning: T, seed, night: n, scenario: urlScenario });
+  game = BENCH ? new Game({ tuning: T, seed: benchCfg.seed, night: 1, scenario: benchScenario(benchCfg.seed), bench: true })
+    : new Game({ tuning: T, seed, night: n, scenario: urlScenario });
   for (const L of game.lanterns) lanternViews.set(L.id, makeLantern(L));
   camYaw = Math.atan2(game.player.facing[0], game.player.facing[1]);
   if (params.has('yaw')) camYaw = (Number(params.get('yaw')) * Math.PI) / 180;
@@ -390,7 +395,8 @@ function onEvent(ev) {
 }
 let msgTimer = 0;
 const drainWarned = new Set();
-function message(t) { $('hud-msg').textContent = t; $('hud-msg').style.opacity = 1; clearTimeout(msgTimer); msgTimer = setTimeout(() => ($('hud-msg').style.opacity = 0), 2600); }
+function message(t) {
+  if (BENCH) return; $('hud-msg').textContent = t; $('hud-msg').style.opacity = 1; clearTimeout(msgTimer); msgTimer = setTimeout(() => ($('hud-msg').style.opacity = 0), 2600); }
 
 function endNight({ result, reason }) {
   mode = 'result'; stopMusic(); document.exitPointerLock?.();
@@ -418,30 +424,32 @@ $('hud-bar').innerHTML = '<div class="cell"></div>'.repeat(T.capacity_max) + '<s
 const cells = [...document.querySelectorAll('#hud-bar .cell')];
 let lastSecond = null;
 const proj = new THREE.Vector3();
+const hudCache = new Map();
+const setText = (id, v) => { if (hudCache.get(id) !== v) { hudCache.set(id, v); $(id).textContent = v; } };
 function updateHud() {
   const p = game.player;
-  $('hud-flames').innerHTML = Array.from({ length: T.flames }, (_, i) => flameSvg.replace('class="flame"', `class="flame${i < p.flames ? '' : ' lost'}"`)).join('');
+  if (hudCache.get('flames') !== p.flames) { hudCache.set('flames', p.flames); $('hud-flames').innerHTML = Array.from({ length: T.flames }, (_, i) => flameSvg.replace('class="flame"', `class="flame${i < p.flames ? '' : ' lost'}"`)).join(''); }
   const tl = Math.max(0, Math.ceil(game.timeLeft - 1e-9));
   const clock = $('hud-clock');
-  clock.textContent = `${String(Math.floor(tl / 60)).padStart(2, '0')}:${String(tl % 60).padStart(2, '0')}`;
+  setText('hud-clock', `${String(Math.floor(tl / 60)).padStart(2, '0')}:${String(tl % 60).padStart(2, '0')}`);
   clock.classList.toggle('danger', tl <= 30);
   if (mode === 'playing' && tl <= 10 && tl > 0 && tl !== lastSecond) { sfx.tick(); }
   lastSecond = tl;
   const lit = game.lanterns.filter((l) => l.lit).length;
-  $('hud-lit').textContent = `${lit}/${game.lanterns.length}`;
-  $('hud-need').textContent = `cần ${game.winNeed} lúc bình minh`;
+  setText('hud-lit', `${lit}/${game.lanterns.length}`);
+  setText('hud-need', `cần ${game.winNeed} lúc bình minh`);
   $('hud-need').classList.toggle('danger', lit < game.winNeed);
-  $('hud-score').textContent = game.score;
+  setText('hud-score', String(game.score));
   const cap = game.capacity;
   cells.forEach((c, i) => { c.classList.toggle('on', i < p.carried); c.classList.toggle('hidden', i >= cap); });
-  $('hud-carry').textContent = `${p.carried}/${cap}`;
+  setText('hud-carry', `${p.carried}/${cap}`);
   const dashCd = p.charm > 0 ? 0 : p.dashCd / Math.round(T.dash_cooldown_s * 60);
   $('cd-dash').querySelector('.shade').style.height = `${Math.min(1, dashCd) * 100}%`;
   $('cd-dash').classList.toggle('charm', p.charm > 0);
   const pulseCd = p.pulseCd / Math.round(T.pulse_cooldown_s * 60);
   $('cd-pulse').querySelector('.shade').style.height = `${p.carried < T.pulse_cost ? 100 : Math.min(1, pulseCd) * 100}%`;
   $('hud-charm').classList.toggle('hidden', !(p.charm > 0));
-  $('hud-charm-s').textContent = `${Math.ceil(p.charm / 60)} s`;
+  setText('hud-charm-s', `${Math.ceil(p.charm / 60)} s`);
 
   // prompt near an unlit lantern
   const FUELMAX = T.fuel_max * 60;
@@ -484,11 +492,16 @@ function render(t, dt) {
   player.userData.pl.intensity = 1.2 + 0.25 * p.carried;
   player.userData.tail.rotation.x = 0.4 + Math.min(1.1, Math.hypot(p.vel[0], p.vel[2]) / 8) + Math.sin(t * 12) * 0.08;
 
-  const camDist = 10, h = 6;
-  const cx = p.pos[0] - Math.sin(camYaw) * camDist, cz = p.pos[2] - Math.cos(camYaw) * camDist;
-  const cy = Math.max(p.pos[1], -6) + h;
-  camera.position.lerp(new THREE.Vector3(cx, cy, cz), Math.min(1, dt * 8));
-  camera.lookAt(p.pos[0], Math.max(p.pos[1], -6) + 1.4, p.pos[2]);
+  if (BENCH) {
+    const c = benchCamera(bench.t0 == null ? 0 : (performance.now() - bench.t0) / 1000);
+    camera.position.set(c[0], c[1], c[2]); camera.lookAt(0, 0, 0);
+  } else {
+    const camDist = 10, h = 6;
+    const cx = p.pos[0] - Math.sin(camYaw) * camDist, cz = p.pos[2] - Math.cos(camYaw) * camDist;
+    const cy = Math.max(p.pos[1], -6) + h;
+    camera.position.lerp(new THREE.Vector3(cx, cy, cz), Math.min(1, dt * 8));
+    camera.lookAt(p.pos[0], Math.max(p.pos[1], -6) + 1.4, p.pos[2]);
+  }
 
   let lit = 0;
   for (const L of game.lanterns) {
@@ -520,26 +533,50 @@ function render(t, dt) {
   scene.background.copy(AMBIENT_SKY).lerp(DAWN_SKY, k * 0.6);
   scene.fog.far = 130 + 60 * k;
 
-  sync(moteViews, game.motes, makeMote);
+  // motes (instanced cores + one Points draw for the halos)
+  let nm = 0;
+  const hp = haloGeo.attributes.position.array;
   for (const m of game.motes) {
-    const v = moteViews.get(m.id), ph = parseInt(m.id.slice(1), 10);
-    v.g.position.set(m.pos[0] + Math.sin(t * 1.3 + ph) * 0.15, m.pos[1] + 0.9 + Math.sin(t * 2 + ph) * 0.25, m.pos[2] + Math.cos(t * 1.1 + ph) * 0.15);
-    v.g.visible = m.kind !== 'dropped' || m.ttl > 120 || Math.floor(t * 8) % 2 === 0; // dropped motes blink before vanishing
+    if (nm >= MAX_MOTES) break;
+    if (m.kind === 'dropped' && m.ttl <= 120 && Math.floor(t * 8) % 2 === 1) continue; // dropped motes blink before vanishing
+    const ph = parseInt(m.id.slice(1), 10);
+    _v.set(m.pos[0] + Math.sin(t * 1.3 + ph) * 0.15, m.pos[1] + 0.9 + Math.sin(t * 2 + ph) * 0.25, m.pos[2] + Math.cos(t * 1.1 + ph) * 0.15);
+    _m.makeTranslation(_v.x, _v.y, _v.z); moteCores.setMatrixAt(nm, _m);
+    hp[nm * 3] = _v.x; hp[nm * 3 + 1] = _v.y; hp[nm * 3 + 2] = _v.z;
+    nm++;
   }
-  sync(shadeViews, game.shades, makeShade);
+  moteCores.count = nm; moteCores.instanceMatrix.needsUpdate = true;
+  haloGeo.setDrawRange(0, nm); haloGeo.attributes.position.needsUpdate = true;
+
+  // shades (instanced body, outline and eyes)
+  let ns = 0;
+  const seenShades = new Set(), edgeHex = shadeEdgeColor(), k2 = Math.min(1, dt * 6);
   for (const s of game.shades) {
-    const v = shadeViews.get(s.id), stunned = s.state === 'stunned';
-    v.g.position.set(s.pos[0], s.pos[1] + Math.sin(t * 3 + s.id.length) * 0.15, s.pos[2]);
-    v.g.lookAt(p.pos[0], s.pos[1], p.pos[2]);
-    const grow = s.state === 'spawning' ? 0.3 : 1;
-    const target = grow * (stunned ? 0.85 : 1);
-    v.g.scale.setScalar(v.g.scale.x + (target - v.g.scale.x) * Math.min(1, dt * 6));
+    if (ns >= MAX_SHADES) break;
+    seenShades.add(s.id);
+    const stunned = s.state === 'stunned';
+    const target = (s.state === 'spawning' ? 0.3 : 1) * (stunned ? 0.85 : 1);
+    const sc = (shadeAnim.get(s.id) ?? 0.01) + (target - (shadeAnim.get(s.id) ?? 0.01)) * k2;
+    shadeAnim.set(s.id, sc);
+    let fx = p.pos[0], fz = p.pos[2];
+    if (s.state === 'drain') { const L = game.lanterns.find((l) => l.id === s.drainId); if (L) { fx = L.pos[0]; fz = L.pos[2]; } }
+    _q.setFromAxisAngle(_up, Math.atan2(fx - s.pos[0], fz - s.pos[2]));
     const sq = stunned ? 0.75 + Math.sin(t * 20) * 0.08 : 1 + Math.sin(t * 4) * 0.06;
-    v.blob.scale.set(1 / sq, sq, 1 / sq); v.edge.scale.copy(v.blob.scale);
-    v.bodyMat.color.setHex(stunned ? C.shadeStun : C.shadeBody);
-    v.edgeMat.opacity = stunned ? 0.3 : s.state === 'recoil' ? 0.5 : s.state === 'drain' ? 0.6 + 0.4 * Math.sin(t * 9) : 0.85;
-    if (s.state === 'drain') { const L = game.lanterns.find((l) => l.id === s.drainId); if (L) v.g.lookAt(L.pos[0], s.pos[1], L.pos[2]); v.blob.scale.set(0.85, 1.15 + Math.sin(t * 9) * 0.06, 1.25); }
+    if (s.state === 'drain') _s.set(0.85 * sc, (1.15 + Math.sin(t * 9) * 0.06) * sc, 1.25 * sc); else _s.set(sc / sq, sc * sq, sc / sq);
+    _v.set(s.pos[0], s.pos[1] + Math.sin(t * 3 + s.id.length) * 0.15, s.pos[2]);
+    _m.compose(_v, _q, _s);
+    shadeBodies.setMatrixAt(ns, _m); shadeEdges.setMatrixAt(ns, _m);
+    for (let e = 0; e < 2; e++) { _e.makeTranslation(EYE_OFFSETS[e].x, EYE_OFFSETS[e].y, EYE_OFFSETS[e].z).premultiply(_m); shadeEyes.setMatrixAt(ns * 2 + e, _e); }
+    _c.setHex(stunned ? C.shadeStun : C.shadeBody); shadeBodies.setColorAt(ns, _c);
+    // outline strength by state (was material opacity): blend the outline colour toward the body colour
+    const glow = stunned ? 0.3 : s.state === 'recoil' ? 0.5 : s.state === 'drain' ? 0.6 + 0.4 * Math.sin(t * 9) : 0.9;
+    _c2.setHex(edgeHex).lerp(_c, 1 - glow); shadeEdges.setColorAt(ns, _c2);
+    ns++;
   }
+  for (const id of shadeAnim.keys()) if (!seenShades.has(id)) shadeAnim.delete(id);
+  shadeBodies.count = shadeEdges.count = ns; shadeEyes.count = ns * 2;
+  for (const im of [shadeBodies, shadeEdges, shadeEyes]) im.instanceMatrix.needsUpdate = true;
+  if (ns) { shadeBodies.instanceColor.needsUpdate = true; shadeEdges.instanceColor.needsUpdate = true; }
   sync(drifterViews, game.drifters.filter((d) => d.state !== 'removed'), makeDrifter);
   for (const d of game.drifters) {
     const v = drifterViews.get(d.id); if (!v) continue;
@@ -589,6 +626,19 @@ function render(t, dt) {
 // ---------- loop ----------
 let fpsFrames = 0, fpsT = performance.now(), fpsLog = [];
 window.__resetFps = () => { fpsLog = []; };
+const bench = { t0: null, last: null, dts: [], done: false };
+function benchTick(now) {
+  if (bench.t0 == null) { bench.t0 = now; bench.last = now; window.__bench = { done: false, firstFrameEpoch: performance.timeOrigin + now }; return; }
+  const dt = now - bench.last; bench.last = now;
+  const el = (now - bench.t0) / 1000;
+  if (el > benchCfg.warmup && el <= benchCfg.warmup + benchCfg.duration) bench.dts.push(dt);
+  if (el > benchCfg.warmup + benchCfg.duration && !bench.done) {
+    bench.done = true;
+    const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+    Object.assign(window.__bench, { done: true, dts: bench.dts, three: THREE.REVISION, gl: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+      viewport: `${innerWidth}x${innerHeight}`, pixelRatio: renderer.getPixelRatio(), shades: game.shades.length, motes: game.motes.length, lit: game.lanterns.filter((l) => l.lit).map((l) => l.id) });
+  }
+}
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
@@ -607,6 +657,7 @@ function frame(now) {
   }
   if (game) render(now / 1000, dt);
   renderer.render(scene, camera);
+  if (BENCH) benchTick(performance.now());
   fpsFrames++;
   if (now - fpsT >= 1000) {
     const fps = (fpsFrames * 1000) / (now - fpsT); fpsFrames = 0; fpsT = now;
@@ -623,5 +674,5 @@ if (params.has('fps')) $('fps').classList.remove('hidden');
 window.__showIntro = showIntro; // used by scripts/screens.js
 if (params.has('cb')) settings.colorblind = true;
 applyColorblind();
-if (params.has('autostart')) { show(null); mode = 'playing'; $('hud').classList.remove('hidden'); }
+if (params.has('autostart') || BENCH) { show(null); mode = 'playing'; $('hud').classList.remove('hidden'); }
 requestAnimationFrame(frame);

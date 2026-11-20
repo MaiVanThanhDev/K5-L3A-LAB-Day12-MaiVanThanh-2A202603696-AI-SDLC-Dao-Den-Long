@@ -8,10 +8,11 @@ import os from 'node:os';
 import { cases as cases1, ROOT, runHeadless } from '../tests/cases.js';
 import { cases2 } from '../tests/cases2.js';
 import { cases3 } from '../tests/cases3.js';
+import { cases4 } from '../tests/cases4.js';
 
-const phase = process.argv[2] || '3';
+const phase = process.argv[2] || '4';
 // Phase N proof = every case so far (Phase 1 regression + new rules).
-const cases = [cases1, cases2, cases3].slice(0, Math.min(3, Number(phase))).flat();
+const cases = [cases1, cases2, cases3, cases4].slice(0, Math.min(4, Number(phase))).flat();
 const dir = join(ROOT, 'docs', 'proof', `phase-${phase}`);
 mkdirSync(join(dir, 'out'), { recursive: true });
 
@@ -19,7 +20,7 @@ const rows = [];
 let failed = 0;
 for (const c of cases) {
   let status = 'PASS', detail;
-  try { detail = c.run(); } catch (e) { status = 'FAIL'; failed++; detail = e.message.split('\n')[0]; }
+  try { detail = await c.run(); } catch (e) { status = 'FAIL'; failed++; detail = e.message.split('\n')[0]; }
   rows.push(`| ${c.id} | ${c.req} | ${status === 'PASS' ? '✅ PASS' : '❌ FAIL'} | ${String(detail).replace(/\|/g, '\\|')} |`);
   console.log(`${status} ${c.id} ${c.req}`);
 }
