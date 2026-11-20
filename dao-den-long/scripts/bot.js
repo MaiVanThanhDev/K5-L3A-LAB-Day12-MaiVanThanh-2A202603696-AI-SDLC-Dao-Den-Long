@@ -83,17 +83,21 @@ let prev = null, stuck = 0, lastPos = [...g.player.pos], jitter = 0;
 const limit = g.dawnTick;
 for (let k = 0; k < limit && g.state === 'playing'; k++) {
   const p = g.player.pos;
-  let unlit = g.lanterns.filter((l) => !l.lit);
-  // Night 3: finish the ground-level lanterns first, then climb
-  const ground = unlit.filter((l) => level(l.pos[1]) === 0);
-  if (night === 3 && ground.length) unlit = ground;
-  const needed = g.lanterns.filter((l) => !l.lit).reduce((s, l) => s + T.lantern_cost - l.deposited, 0);
-  const lantern = [...unlit].sort((a, b) => d(p, a.pos) + 8 * Math.abs(level(a.pos[1]) - level(p[1])) - d(p, b.pos) - 8 * Math.abs(level(b.pos[1]) - level(p[1])))[0];
-  const want = Math.min(T.carry_capacity, needed, T.lantern_cost - lantern.deposited + (T.pulse_cost));
+  // Ticket-03: keep enough lanterns burning until dawn. Work on unlit lanterns or lit ones under 60 fuel;
+  // a lit lantern under 40 fuel is urgent (refuel it first). Night 3: stay on ground-level lanterns.
+  const FU = 60;
+  const reachable = (l) => night !== 3 || level(l.pos[1]) === 0;
+  const need = (l) => (l.lit ? Math.ceil((T.fuel_max * FU - l.fuel) / (T.fuel_per_mote * FU)) : (l.everLit ? T.relight_cost : T.lantern_cost) - l.deposited);
+  let pool = g.lanterns.filter((l) => reachable(l) && (!l.lit || l.fuel < 60 * FU));
+  if (!pool.length) pool = g.lanterns.filter(reachable);
+  const urgent = pool.filter((l) => l.lit && l.fuel < 40 * FU).sort((a, b) => a.fuel - b.fuel);
+  const lantern = urgent[0] || [...pool].sort((a, b) => d(p, a.pos) - d(p, b.pos))[0];
+  const needL = Math.max(1, need(lantern));
+  const want = Math.min(g.capacity, needL + T.pulse_cost);
   let target, interact = false, pulse = false, dash = false;
   let motes = g.motes.filter((m) => m.from <= g.simTick + 1);
-  if (night === 3 && ground.length && motes.some((m) => level(m.pos[1]) === 0)) motes = motes.filter((m) => level(m.pos[1]) === 0);
-  if (g.player.carried >= Math.min(want, needed) || motes.length === 0) {
+  if (night === 3 && motes.some((m) => level(m.pos[1]) === 0)) motes = motes.filter((m) => level(m.pos[1]) === 0);
+  if (g.player.carried >= want || (urgent.length && g.player.carried >= Math.min(needL, 3)) || motes.length === 0) {
     target = lantern.pos;
     interact = d(p, lantern.pos) <= T.interact_radius - 0.2 && Math.abs(level(p[1]) - level(lantern.pos[1])) === 0 && k % 2 === 0;
   } else {
@@ -108,7 +112,7 @@ for (let k = 0; k < limit && g.state === 'playing'; k++) {
   let dx = wp[0] - p[0], dz = wp[2] - p[2];
   let n = Math.hypot(dx, dz) || 1;
   // steer away from nearby active shades (stronger when closer), unless already safe in a lit zone
-  const inSafe = g.lanterns.some((l) => l.lit && d(p, l.pos) < T.safe_radius - 0.5);
+  const inSafe = g.lanterns.some((l) => g.hasZone(l) && d(p, l.pos) < T.safe_radius - 0.5);
   if (!inSafe && danger.length && !(pulse)) {
     let rx = 0, rz = 0;
     for (const sh of danger) { const q = d(p, sh.pos) || 0.01, w = (7 - q) / q; rx += ((p[0] - sh.pos[0]) / q) * w; rz += ((p[2] - sh.pos[2]) / q) * w; }

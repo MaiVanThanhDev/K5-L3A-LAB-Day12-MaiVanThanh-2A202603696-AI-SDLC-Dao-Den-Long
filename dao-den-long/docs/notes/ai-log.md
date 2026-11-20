@@ -62,3 +62,30 @@ Công cụ: **Claude Code** (VS Code extension), model Claude Opus 5.5. Harness:
 - **Đạt:** 49/49 case (21 regression + 28 mới, mỗi tính năng mới ≥ 1 scenario). Contract v1.1 đủ trường, sự kiện và trạng thái. 21.600 tick chạy trong khoảng 0.5 s mỗi Đêm. Client khoảng 58 FPS ở 1280×720. Spec có AC cho từng mục Phần 3.
 - **Chưa đạt / rủi ro:** bot tham lam không thắng được Đêm nào với số chuẩn: tốt nhất Đêm 1 thắp 4/5, Đêm 2 4/6, Đêm 3 1/7 (Bóng Mực 4–4.5 m/s, tới 10 con, phát hiện 12 m). Vì vậy **chưa có bằng chứng tự động rằng 3 Đêm thắng được từ đầu tới cuối mà không dựng scenario**. Đường thắng được chứng minh từng phần qua scenario (G11, P25, màn Bình Minh). Âm thanh và cài đặt chỉ kiểm tra bằng code và chơi thử, chưa ghi hình.
 - **Harness cần chỉnh:** cần một bot tốt hơn (tránh bóng theo vùng an toàn, đi đường nhiều tầng) hoặc ghi hình chơi tay ở Phase 4.
+
+## Phase 3
+
+| Bước | Lời nhắc / việc | Kết quả |
+|---|---|---|
+| 1 | Dán Ticket-03 kèm câu hỏi "đổi giao diện Mây bằng Songoku đội nón được không" | AI **từ chối dựng lại Songoku** (nhân vật có bản quyền; PRD lại yêu cầu Mây đội nón lá) và đề xuất một tạo hình gốc. Sau đó làm ticket. |
+| 2 | Contract v1.2, mô hình đèn mới | Dầu lưu bằng số nguyên 1/60. Vùng an toàn gom về một hàm `hasZone()`. Trạng thái `drain`. Luật thắng ở bình minh. ADR 0001 ghi lý do. |
+| 3 | Chạy lại 49 case cũ | 7 case đỏ, đều do luật bị thay (không thắng sớm, thời lượng, điểm, `relight`, đèn sáng nhận châm dầu). Sửa kèm lý do trong CHANGELOG, không skip. |
+| 4 | 13 case Phase 3, kỳ vọng tính theo FU | 11/13 lần đầu. 1 lỗi test, 1 lỗi code thật (xem dưới). |
+| 5 | Client: thanh dầu, nhấp nháy 1 Hz, đèn tắt rách, mù màu | Xem ảnh thật thì phát hiện **vòng an toàn vẫn vẽ quanh đèn < 30 dầu** và thanh dầu không nhìn thấy. Sửa cả hai, chụp lại. |
+| 6 | Bot với luật mới | Thử chiến thuật "nạp sẵn 9/10 rồi thắp cuối Đêm": tệ hơn, vì Bóng Mực wander giờ đứng canh đèn tắt. Quay về bản đơn giản. |
+
+### Lỗi của AI và cách phát hiện
+
+1. **Lỗi code thật (F13)**: `target_lantern_id` lạ chỉ được kiểm tra khi scenario có mảng `lanterns`. Test mã thoát 2 phát hiện. Đã chuyển phép kiểm tra ra ngoài.
+2. **Kỳ vọng sai (F8)**: AI cho 2 Bóng Mực hút một đèn còn 50 dầu, quên rằng đèn ≥ 30 vẫn còn vùng an toàn nên chúng bị đẩy ra. Sửa thành 25 dầu.
+3. **Hệ quả luật dễ bỏ sót (P10)**: đèn vừa sáng đã hao 1/60 ở bước 2, nên không bao giờ "đầy" lúc tương tác. Ghi thành giả định C7.
+4. **Lỗi hiển thị** chỉ thấy khi xem ảnh: vòng an toàn dùng `L.lit` thay vì `hasZone`. Đã đổi sang dùng hàm của lõi.
+5. Heredoc bash vỡ vì nội dung quá dài/nhiều dấu nháy. Đổi sang ghi script Python ra file trong scratchpad rồi chạy.
+
+Điều chỉnh harness: AGENTS.md thêm "vùng an toàn chỉ qua `hasZone`", "dầu là số nguyên 1/60", "change request → ADR + CHANGELOG trước khi gắn tag". Skill verify nhắc thứ tự trừ dầu ở bước 2 trước tương tác ở bước 5.
+
+### Đánh giá Phase 3
+
+- **Đạt:** 62/62 case (13 mới; 7 case cũ được cập nhật có lý do; 42 case cũ không đổi). Có ADR, CHANGELOG breaking, spec có AC. Chế độ mù màu, thanh dầu và đèn rách đều có ảnh. Khoảng 55–58 FPS.
+- **Chưa đạt / rủi ro:** bot vẫn chưa thắng Đêm nào (Đêm 1 sống tới bình minh nhưng 2/5 đèn), nên chưa có bằng chứng tự động rằng thắng được mà không dựng scenario. Âm thanh `lantern_out` và lưu cài đặt chỉ kiểm tra bằng code.
+- **Quan sát thiết kế:** lượng đom đóm sinh ra (20 + 1 mỗi 4 s, tối đa 24 điểm) vừa sát lượng cần để giữ 3 đèn suốt 240 s, cộng thêm Bóng Mực canh đèn tắt. Đêm 1 khó hơn hẳn Phase 2. Có thể cần playtest người thật.
