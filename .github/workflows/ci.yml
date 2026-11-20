@@ -6,9 +6,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: dao-den-long   # the game lives in a subfolder of the repo
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
