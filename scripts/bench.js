@@ -94,7 +94,7 @@ const evaluate = async (expr) => (await call('Runtime.evaluate', { expression: e
 
 const version = await call('Browser.getVersion');
 await call('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
-await call('Page.navigate', { url: `http://127.0.0.1:${port}/?bench&seed=${seed}&duration=${duration}&warmup=${warmup}` });
+await call('Page.navigate', { url: `http://127.0.0.1:${port}/?bench&seed=${seed}&duration=${duration}&warmup=${warmup}${process.env.BENCH_QS || ''}` }); // BENCH_QS: extra query for A/B experiments only
 
 const deadline = Date.now() + (warmup + duration + 90) * 1000;
 let peak = null, result = null, sampling = false;

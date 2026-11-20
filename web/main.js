@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { Game, DT, NIGHTS } from '/src/sim/game.js';
 import { sfx, unlock, setVolume, startMusic, stopMusic } from '/web/audio.js';
 import { benchScenario, benchCamera } from '/src/sim/bench.js';
+import { createSky, createCloudSea, islandMesh, decorations, grass, ambientFireflies, radialTexture, shadowTexture } from '/web/scenery.js';
+import { createMay } from '/web/may.js';
 import { validate as validateEntry, insert as insertEntry } from '/src/leaderboard-rules.js';
 
 const contract = await (await fetch('/game.contract.json')).json();
@@ -63,53 +65,32 @@ scene.add(ambient);
 const moon = new THREE.DirectionalLight(0xaab4ff, 1.1); // moonlight (not the ambient term)
 moon.position.set(-30, 60, -20);
 scene.add(moon);
-{
-  const g = new THREE.BufferGeometry(), pts = [];
-  for (let i = 0; i < 700; i++) {
-    const a = Math.random() * Math.PI * 2, e = Math.random() * 0.45 * Math.PI + 0.05, r = 300;
-    pts.push(r * Math.cos(e) * Math.cos(a), r * Math.sin(e), r * Math.cos(e) * Math.sin(a));
-  }
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0xfff6c2, size: 1.1, fog: false })));
-}
-const sea = new THREE.Mesh(new THREE.CircleGeometry(400, 48), new THREE.MeshLambertMaterial({ color: C.sea }));
-sea.rotation.x = -Math.PI / 2; sea.position.y = -9; scene.add(sea);
+const OFF = new Set((params.get('x') || '').split(',')); // A/B switches for bench experiments only
+const sky = OFF.has('sky') ? { update() {} } : createSky(scene, C);
+const cloudSea = OFF.has('sea') ? { update() {} } : createCloudSea(scene, C);
+const glowTex = radialTexture('rgba(255,200,120,1)', 'rgba(255,200,120,0)');
+const shadowTex = shadowTexture();
 
 const mat = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, ...extra });
-const M = { grass: mat(C.grass), sand: mat(C.sand), wood: mat(C.wood), stone: mat(C.stone), cliff: mat(0x3d4a52) };
+const M = { grass: mat(C.grass), sand: mat(C.sand), wood: mat(C.wood), stone: mat(C.stone), cliff: mat(0x3d4a52, { flatShading: true }) };
 
 // ---------- world building per night ----------
 let world = null; // THREE.Group of static geometry for the current night
-function island(r, cx = 0, cz = 0, depth = 6) {
-  const g = new THREE.Group();
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(r - 2.5, r - 2.5, 0.2, 64), M.grass);
-  top.position.y = -0.1; g.add(top);
-  const rim = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.18, 64, 1, true), M.sand);
-  const sand = new THREE.Mesh(new THREE.RingGeometry(r - 2.5, r, 64), M.sand);
-  sand.rotation.x = -Math.PI / 2; sand.position.y = -0.01; g.add(sand); rim.position.y = -0.1; g.add(rim);
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.55, depth, 48), M.cliff);
-  body.position.y = -depth / 2 - 0.2; g.add(body);
-  g.position.set(cx, 0, cz);
-  return g;
+const island = (r, cx = 0, cz = 0) => { const g = islandMesh(r, C); g.position.set(cx, 0, cz); return g; };
+// Decorations are creative scenery: off in the bench scene; their colliders become client-only sim obstacles.
+function decorate(g, spots, avoid, areas) {
+  if (BENCH) return;
+  const map = NIGHTS[night];
+  const clear = (x, z) => avoid(x, z) || map.motePoints.some((q) => Math.hypot(x - q[0], z - q[2]) < 2.2)
+    || map.shadePoints.some((q) => Math.hypot(x - q[0], z - q[2]) < 2.2) || Math.hypot(x - map.start[0], z - map.start[2]) < 4;
+  const d = decorations(C, spots, clear);
+  g.add(d.group);
+  g.userData.colliders.push(...d.colliders);
+  g.add(grass(C, areas, (x, z) => clear(x, z) || d.colliders.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + 0.3)));
+  if (fireflies) scene.remove(fireflies.obj);
+  fireflies = ambientFireflies(scene, areas);
 }
-function decorate(g, n, rMin, rMax, cx = 0, cz = 0, avoid = () => false) {
-  if (BENCH) return; // creative scenery is off in the standard benchmark scene
-  const rock = new THREE.DodecahedronGeometry(0.6), trunk = new THREE.CylinderGeometry(0.12, 0.18, 2.2, 6), leaf = new THREE.ConeGeometry(1.1, 2.2, 7);
-  const leafMat = mat(0x24493f);
-  for (let i = 0; i < n; i++) {
-    const a = i * 2.39996, r = rMin + ((i * 7919) % 100) / 100 * (rMax - rMin);
-    const x = cx + r * Math.cos(a), z = cz + r * Math.sin(a);
-    if (avoid(x, z)) continue;
-    if (i % 3 === 0) {
-      const t = new THREE.Group();
-      const tr = new THREE.Mesh(trunk, M.wood); tr.position.y = 1.1; t.add(tr);
-      const lf = new THREE.Mesh(leaf, leafMat); lf.position.y = 2.8; t.add(lf);
-      t.position.set(x, 0, z); g.add(t);
-    } else {
-      const m = new THREE.Mesh(rock, M.stone); m.scale.setScalar(0.6 + (i % 4) * 0.35); m.position.set(x, 0.1, z); g.add(m);
-    }
-  }
-}
+let fireflies = null;
 function pad(g, pos, toward) {
   const p = new THREE.Group();
   const base = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.1, 0.25, 24), mat(C.stone));
@@ -126,17 +107,18 @@ function buildWorld(n) {
   if (world) scene.remove(world);
   world = new THREE.Group();
   const map = NIGHTS[n];
-  world.userData.pads = [];
+  world.userData.pads = []; world.userData.colliders = [];
+  if (fireflies) { scene.remove(fireflies.obj); fireflies = null; }
   if (n === 1) {
     world.add(island(40));
-    decorate(world, 60, 27, 37, 0, 0, (x, z) => map.lanterns.some((l) => Math.hypot(x - l[0], z - l[2]) < 4));
+    decorate(world, [[0, 0, 70, 26, 37], [0, 0, 18, 6, 18]], (x, z) => map.lanterns.some((l) => Math.hypot(x - l[0], z - l[2]) < 4.5), [[0, 0, 40]]);
   } else if (n === 2) {
     world.add(island(28, 0, 0)); world.add(island(28, 70, 0));
     const bridge = new THREE.Group();
     for (let x = 26; x < 44; x += 0.6) { const plank = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.15, 4), M.wood); plank.position.set(x + 0.3, -0.08, 0); bridge.add(plank); }
     for (const z of [-2.1, 2.1]) { const rope = new THREE.Mesh(new THREE.BoxGeometry(18, 0.08, 0.08), mat(0xc9b48a)); rope.position.set(35, -0.05, z); bridge.add(rope); }
     world.add(bridge);
-    for (const cx of [0, 70]) decorate(world, 30, 16, 26, cx, 0, (x, z) => map.lanterns.some((l) => Math.hypot(x - l[0], z - l[2]) < 4) || map.pads.some((p) => Math.hypot(x - p.pos[0], z - p.pos[2]) < 3) || (Math.abs(z) < 4 && Math.abs(x - 35) < 12));
+    decorate(world, [[0, 0, 34, 14, 26], [70, 0, 34, 14, 26]], (x, z) => map.lanterns.some((l) => Math.hypot(x - l[0], z - l[2]) < 4.5) || map.pads.some((p) => Math.hypot(x - p.pos[0], z - p.pos[2]) < 3.5) || map.charms.some((c) => Math.hypot(x - c[0], z - c[2]) < 3) || (Math.abs(z) < 5 && x > 18 && x < 52) || Math.hypot(x - 20, z - 18) < 4 || Math.hypot(x - 50, z + 18) < 4, [[0, 0, 28], [70, 0, 28]]);
     for (const p of map.pads) world.userData.pads.push(pad(world, p.pos, [p.toward[0] - p.pos[0], p.toward[1] - p.pos[2]]));
   } else {
     world.add(island(45));
@@ -144,10 +126,12 @@ function buildWorld(n) {
     const pts = [];
     for (let i = 0; i <= 32; i++) { const a = (i / 32) * Math.PI; pts.push(new THREE.Vector2(24 * Math.cos(a), -24 * Math.sin(a))); }
     for (let i = 32; i >= 0; i--) { const a = (i / 32) * Math.PI; pts.push(new THREE.Vector2(12 * Math.cos(a), -12 * Math.sin(a))); }
-    const t1 = new THREE.ExtrudeGeometry(new THREE.Shape(pts), { depth: 3, bevelEnabled: false, curveSegments: 32 });
+    const t1 = new THREE.ExtrudeGeometry(new THREE.Shape(pts), { depth: 3, bevelEnabled: false, curveSegments: 32, steps: 3 });
     t1.rotateX(-Math.PI / 2);
     world.add(new THREE.Mesh(t1, [M.grass, M.cliff]));
-    const t2 = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 6, 48), [M.cliff, M.grass, M.cliff]);
+    const t2 = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 6, 40, 4), [M.cliff, M.grass, M.cliff]);
+    // tier rims: thin sand edges so the walkable edge reads clearly
+    const rim2 = new THREE.Mesh(new THREE.RingGeometry(7.6, 8, 48), M.sand); rim2.rotation.x = -Math.PI / 2; rim2.position.y = 6.01; world.add(rim2);
     t2.position.y = 3; world.add(t2);
     for (const a of map.ramps) {
       const wedge = new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(6, 0), new THREE.Vector2(6, 3)]), { depth: 3, bevelEnabled: false });
@@ -164,7 +148,7 @@ function buildWorld(n) {
     const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.9, 1.2, 16, 1, true), mat(C.gold, { side: THREE.DoubleSide })); bell.position.y = 6.8; tower.add(bell);
     world.userData.bell = bell;
     tower.position.y = 6; world.add(tower);
-    decorate(world, 50, 30, 42, 0, 0, (x, z) => map.lanterns.some((l) => Math.hypot(x - l[0], z - l[2]) < 4) || map.ramps.some((a) => Math.hypot(x - 27 * Math.cos(a * Math.PI / 180), z - 27 * Math.sin(a * Math.PI / 180)) < 5) || map.charms.some((c) => Math.hypot(x - c[0], z - c[2]) < 3));
+    decorate(world, [[0, 0, 60, 27, 43]], (x, z) => map.lanterns.some((l) => Math.hypot(x - l[0], z - l[2]) < 4.5) || map.ramps.some((a) => Math.hypot(x - 27 * Math.cos(a * Math.PI / 180), z - 27 * Math.sin(a * Math.PI / 180)) < 5.5) || map.charms.some((c) => Math.hypot(x - c[0], z - c[2]) < 3) || (z > -1 && Math.hypot(x, z) < 25.5), [[0, 0, 45]]);
     for (const p of map.pads) world.userData.pads.push(pad(world, p.pos, p.dir));
   }
   scene.add(world);
@@ -184,6 +168,10 @@ function makeLantern(L) {
   const cap = new THREE.Mesh(new THREE.ConeGeometry(0.85, 0.5, 12), mat(0x7a2a24));
   cap.position.y = 4.75; g.add(cap);
   const light = new THREE.PointLight(C.lampOn, 0, 28, 1.6); light.position.y = 3.7; g.add(light);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: C.lampOn, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+  halo.scale.setScalar(5); halo.position.y = 3.7; g.add(halo);
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(4, 32), new THREE.MeshBasicMaterial({ map: glowTex, color: C.lampOn, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+  pool.rotation.x = -Math.PI / 2; pool.position.y = 0.03; g.add(pool);
   const ring = new THREE.Mesh(new THREE.RingGeometry(T.safe_radius - 0.12, T.safe_radius, 64), new THREE.MeshBasicMaterial({ color: C.lampOn, transparent: true, opacity: 0, side: THREE.DoubleSide }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04; g.add(ring);
   // torn paper: dark jagged patch, shown only while the lantern is out (shape cue independent of colour)
@@ -203,22 +191,15 @@ function makeLantern(L) {
   }
   g.position.set(L.pos[0], L.pos[1], L.pos[2]);
   scene.add(g);
-  return { g, head, headMat, core, light, ring, pips, glow: 0, tear, tear2, bar, fill, fillMat };
+  return { g, head, headMat, core, light, ring, pips, glow: 0, tear, tear2, bar, fill, fillMat, halo, pool };
 }
 
 // ---------- player: Mây (áo trắng ngà, khăn đỏ, nón lá + đèn lồng nhỏ) ----------
-const player = new THREE.Group();
-{
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.7, 4, 12), mat(C.robe)); body.position.y = 0.75; player.add(body);
-  const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.08, 6, 16), mat(C.scarf)); scarf.rotation.x = Math.PI / 2; scarf.position.y = 1.2; player.add(scarf);
-  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.45, 0.04), mat(C.scarf)); tail.position.set(0.12, 1.0, -0.3); tail.rotation.x = 0.4; player.add(tail);
-  const face = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12), mat(0xf2c9a0)); face.position.y = 1.45; player.add(face);
-  const hat = new THREE.Mesh(new THREE.ConeGeometry(0.78, 0.38, 24), mat(C.sand)); hat.position.y = 1.78; player.add(hat);
-  const mini = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), new THREE.MeshBasicMaterial({ color: C.lampOn })); mini.position.set(0, 1.22, 0.64); player.add(mini);
-  const pl = new THREE.PointLight(C.lampOn, 2, 10, 1.6); pl.position.set(0, 1.4, 0.6); player.add(pl);
-  player.userData = { pl, tail };
-}
+const may = createMay(C);
+const player = may.root;
 scene.add(player);
+const playerShadow = new THREE.Mesh(new THREE.CircleGeometry(0.55, 20), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }));
+playerShadow.rotation.x = -Math.PI / 2; scene.add(playerShadow);
 
 // ---------- motes, shades, drifters, charms (pooled by id) ----------
 const moteGeo = new THREE.SphereGeometry(0.13, 8, 6), moteMat = new THREE.MeshBasicMaterial({ color: C.moteCore });
@@ -244,6 +225,7 @@ const shadeGeo = new THREE.SphereGeometry(0.9, 18, 12), edgeGeo = new THREE.Sphe
 const shadeBodies = instanced(shadeGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX_SHADES);
 const shadeEdges = instanced(edgeGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide }), MAX_SHADES);
 const shadeEyes = instanced(eyeGeo, new THREE.MeshBasicMaterial({ color: shadeEdgeColor() }), MAX_SHADES * 2);
+const shadeShadows = instanced(new THREE.CircleGeometry(0.8, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }), MAX_SHADES);
 const shadeAnim = new Map(); // id → current display scale (spawn grow-in)
 const _m = new THREE.Matrix4(), _e = new THREE.Matrix4(), _q = new THREE.Quaternion(), _v = new THREE.Vector3(), _s = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
 const _c = new THREE.Color(), _c2 = new THREE.Color();
@@ -271,7 +253,7 @@ function sync(views, items, make) {
 }
 function clearViews() {
   for (const views of [drifterViews, charmViews, lanternViews]) { for (const v of views.values()) scene.remove(v.g); views.clear(); }
-  shadeAnim.clear(); shadeBodies.count = shadeEdges.count = shadeEyes.count = moteCores.count = 0; haloGeo.setDrawRange(0, 0);
+  shadeAnim.clear(); shadeBodies.count = shadeEdges.count = shadeEyes.count = shadeShadows.count = moteCores.count = 0; haloGeo.setDrawRange(0, 0);
 }
 
 // pulse rings, wind leaves
@@ -345,7 +327,7 @@ function newGame(n) {
   buildWorld(n);
   const seed = params.has('seed') ? Number(params.get('seed')) : (campaign.seed + n) | 0;
   game = BENCH ? new Game({ tuning: T, seed: benchCfg.seed, night: 1, scenario: benchScenario(benchCfg.seed), bench: true })
-    : new Game({ tuning: T, seed, night: n, scenario: urlScenario });
+    : new Game({ tuning: T, seed, night: n, scenario: urlScenario, obstacles: world.userData.colliders });
   for (const L of game.lanterns) lanternViews.set(L.id, makeLantern(L));
   camYaw = Math.atan2(game.player.facing[0], game.player.facing[1]);
   if (params.has('yaw')) camYaw = (Number(params.get('yaw')) * Math.PI) / 180;
@@ -354,10 +336,12 @@ function newGame(n) {
 }
 function showIntro(n) {
   newGame(n);
-  $('intro-num').textContent = `Đêm ${n} / 3`;
+  $('intro-num').textContent = `ĐÊM ${n} / 3`;
   $('intro-name').textContent = NIGHTS[n].name;
   $('intro-quote').textContent = `Ông Đăng: “${INTRO[n]}”`;
-  $('intro-goal').textContent = `Giữ ít nhất ${game.winNeed}/${game.lanterns.length} đèn sáng tới bình minh (${Math.round(game.timeLeft0 / 60 * 10) / 10} phút). Đèn cạn dầu sẽ tắt — châm thêm đom đóm để giữ lửa.`;
+  const mins = Math.floor(game.timeLeft0 / 60), secs = Math.round(game.timeLeft0 % 60);
+  $('intro-goal').innerHTML = [`🏮 ${game.lanterns.length} đèn`, `🌅 giữ ${game.winNeed} đèn tới bình minh`, `⏳ ${mins}:${String(secs).padStart(2, '0')}`, '🛢 đèn cạn dầu sẽ tắt']
+    .map((c) => `<span class="chip2">${c}</span>`).join('');
   mode = 'intro'; show('scr-intro'); $('hud').classList.add('hidden');
 }
 function play() {
@@ -475,7 +459,16 @@ async function showLeaderboard() {
   $('lb-note').textContent = where === 'disk' ? 'Lưu trên đĩa (data/leaderboard.json). Xuất: npm start -- --export-leaderboard out.json' : 'Không có server: đang lưu trong trình duyệt này.';
 }
 
-function toMenu() { stopMusic(); mode = 'menu'; $('hud').classList.add('hidden'); show('scr-menu'); }
+function toMenu() { stopMusic(); mode = 'menu'; $('hud').classList.add('hidden'); renderNightCards(); show('scr-menu'); }
+function renderNightCards() {
+  const feats = { 1: 'Đảo tròn, 5 đèn lớn', 2: 'Cầu tre · bục nhảy · Gió Lạc · Bùa Gió', 3: 'Ba tầng đá · tháp chuông · gió mạnh' };
+  $('night-cards').innerHTML = [1, 2, 3].map((n) => {
+    const m = NIGHTS[n], total = m.lanterns.length, need = Math.ceil(T.win_ratio * total - 1e-9), dur = T[m.durationKey];
+    const won = campaign.scores[n] != null;
+    return `<div class="ncard panel${won ? ' won' : ''}">${won ? `<span class="badge">★ ${campaign.scores[n]}</span>` : ''}<div class="no">ĐÊM ${n}</div><h3>${m.name}</h3>`
+      + `<div class="meta">${feats[n]}</div><div class="meta">${total} đèn · giữ ${need} · ${Math.floor(dur / 60)}:${String(dur % 60).padStart(2, '0')}</div></div>`;
+  }).join('');
+}
 
 function onEvent(ev) {
   switch (ev.name) {
@@ -532,6 +525,46 @@ $('hud-bar').innerHTML = '<div class="cell"></div>'.repeat(T.capacity_max) + '<s
 const cells = [...document.querySelectorAll('#hud-bar .cell')];
 let lastSecond = null;
 const proj = new THREE.Vector3();
+// Minimap, heading-up: centred on Mây, the camera's forward direction always points up (matches the screen).
+const mm = $('minimap'), mctx = mm.getContext('2d');
+let mmLast = 0;
+function drawMinimap() {
+  const now = performance.now();
+  if (BENCH || now - mmLast < 50) return; // 20 Hz is plenty; creative UI → off in the standard bench scene
+  mmLast = now;
+  const map = NIGHTS[night], W = mm.width, R = W / 2, sc = (R - 8) / 38; // ~38 m around Mây
+  const p = game.player, fx = Math.sin(camYaw), fz = Math.cos(camYaw), rx = -fz, rz = fx; // screen-right = −X at yaw 0
+  const toWorld = () => mctx.setTransform(sc * rx, -sc * fx, sc * rz, -sc * fz, R - sc * (p.pos[0] * rx + p.pos[2] * rz), R + sc * (p.pos[0] * fx + p.pos[2] * fz));
+  mctx.setTransform(1, 0, 0, 1, 0, 0);
+  mctx.clearRect(0, 0, W, W);
+  mctx.save(); mctx.beginPath(); mctx.arc(R, R, R - 2, 0, Math.PI * 2); mctx.clip();
+  mctx.fillStyle = 'rgba(18,56,74,.6)'; mctx.fillRect(0, 0, W, W);
+  toWorld();
+  mctx.fillStyle = 'rgba(47,93,80,.95)'; mctx.strokeStyle = 'rgba(201,180,138,.9)'; mctx.lineWidth = 3 / sc;
+  const disc = (x, z, r) => { mctx.beginPath(); mctx.arc(x, z, r, 0, Math.PI * 2); mctx.fill(); mctx.stroke(); };
+  if (night === 2) { disc(0, 0, 28); disc(70, 0, 28); mctx.fillStyle = 'rgba(107,74,47,.95)'; mctx.fillRect(26, -2, 18, 4); }
+  else disc(0, 0, map.boundR);
+  if (night === 3) {
+    mctx.fillStyle = 'rgba(66,120,104,.95)'; mctx.beginPath(); mctx.arc(0, 0, 24, 0, Math.PI, false); mctx.arc(0, 0, 12, Math.PI, 0, true); mctx.fill();
+    mctx.fillStyle = 'rgba(86,138,120,1)'; mctx.beginPath(); mctx.arc(0, 0, 8, 0, Math.PI * 2); mctx.fill();
+  }
+  const LOW = T.low_fuel_threshold * 60, dot = (x, z, rPx, color) => { mctx.fillStyle = color; mctx.beginPath(); mctx.arc(x, z, rPx / sc, 0, Math.PI * 2); mctx.fill(); };
+  for (const L of game.lanterns) {
+    if (game.hasZone(L)) { mctx.strokeStyle = 'rgba(255,179,71,.55)'; mctx.lineWidth = 2 / sc; mctx.beginPath(); mctx.arc(L.pos[0], L.pos[2], T.safe_radius, 0, Math.PI * 2); mctx.stroke(); }
+    dot(L.pos[0], L.pos[2], 7, L.lit ? (L.fuel < LOW ? (settings.colorblind ? '#FFFFFF' : '#FF5A5F') : '#FFB347') : '#5B5F6E');
+  }
+  const sc1 = settings.colorblind ? '#00B3FF' : '#7A3CFF';
+  for (const s of game.shades) dot(s.pos[0], s.pos[2], 4.5, sc1);
+  for (const d of game.drifters) if (d.state !== 'removed') dot(d.pos[0], d.pos[2], 4, '#8FA3B8');
+  for (const c of game.charms) if (c.available) dot(c.pos[0], c.pos[2], 4, '#C8102E');
+  mctx.setTransform(1, 0, 0, 1, 0, 0);
+  // view cone (always up) + Mây's facing arrow relative to the camera
+  mctx.fillStyle = 'rgba(255,233,176,.16)'; mctx.beginPath(); mctx.moveTo(R, R); mctx.arc(R, R, 52, -Math.PI / 2 - 0.55, -Math.PI / 2 + 0.55); mctx.fill();
+  const ax = p.facing[0] * rx + p.facing[1] * rz, ay = -(p.facing[0] * fx + p.facing[1] * fz);
+  mctx.translate(R, R); mctx.rotate(Math.atan2(ay, ax)); mctx.fillStyle = '#F5F1E6';
+  mctx.beginPath(); mctx.moveTo(11, 0); mctx.lineTo(-7, 7); mctx.lineTo(-3, 0); mctx.lineTo(-7, -7); mctx.closePath(); mctx.fill();
+  mctx.restore();
+}
 let shadeAlerts = [], shakeT = 0;
 const lowWarned = new Set();
 // Show `el` at the screen edge pointing toward world position `pos` when it is off-screen; hide it otherwise.
@@ -570,6 +603,20 @@ function updateHud() {
   const clock = $('hud-clock');
   setText('hud-clock', `${String(Math.floor(tl / 60)).padStart(2, '0')}:${String(tl % 60).padStart(2, '0')}`);
   clock.classList.toggle('danger', tl <= 30);
+  $('hud-top').classList.toggle('danger', tl <= 30);
+  const frac = Math.max(0, game.timeLeft) / game.timeLeft0;
+  const off = (100.5 * (1 - frac)).toFixed(1);
+  if (hudCache.get('ring') !== off) { hudCache.set('ring', off); $('hud-ring').setAttribute('stroke-dashoffset', off); }
+  const FM = T.fuel_max * 60, LOW = T.low_fuel_threshold * 60;
+  const sig = game.lanterns.map((L) => `${L.lit ? 1 : 0}${Math.round(L.fuel / 600)}${L.deposited}`).join('|');
+  if (hudCache.get('lrows') !== sig) {
+    hudCache.set('lrows', sig);
+    $('hud-lanterns').innerHTML = game.lanterns.map((L) => {
+      const cls = L.lit ? (L.fuel < LOW ? 'weak' : 'lit') : 'off';
+      const w = L.lit ? (100 * L.fuel) / FM : (100 * L.deposited) / (L.everLit ? T.relight_cost : T.lantern_cost);
+      return `<div class="lrow ${cls}"><span class="dot"></span><span>${L.id}</span><span class="bar"><i style="width:${w.toFixed(0)}%"></i></span></div>`;
+    }).join('');
+  }
   if (mode === 'playing' && tl <= 10 && tl > 0 && tl !== lastSecond) { sfx.tick(); if (tl === 10) caption('⏳ Còn 10 giây tới bình minh', 'warn', 4000); }
   for (const L of game.lanterns) {
     const low = L.lit && L.fuel < T.low_fuel_threshold * 60;
@@ -586,10 +633,11 @@ function updateHud() {
   cells.forEach((c, i) => { c.classList.toggle('on', i < p.carried); c.classList.toggle('hidden', i >= cap); });
   setText('hud-carry', `${p.carried}/${cap}`);
   const dashCd = p.charm > 0 ? 0 : p.dashCd / Math.round(T.dash_cooldown_s * 60);
-  $('cd-dash').querySelector('.shade').style.height = `${Math.min(1, dashCd) * 100}%`;
+  $('cd-dash').style.setProperty('--cd', Math.min(1, dashCd).toFixed(3));
   $('cd-dash').classList.toggle('charm', p.charm > 0);
   const pulseCd = p.pulseCd / Math.round(T.pulse_cooldown_s * 60);
-  $('cd-pulse').querySelector('.shade').style.height = `${p.carried < T.pulse_cost ? 100 : Math.min(1, pulseCd) * 100}%`;
+  $('cd-pulse').style.setProperty('--cd', (p.carried < T.pulse_cost ? 1 : Math.min(1, pulseCd)).toFixed(3));
+  drawMinimap();
   $('hud-charm').classList.toggle('hidden', !(p.charm > 0));
   setText('hud-charm-s', `${Math.ceil(p.charm / 60)} s`);
 
@@ -626,10 +674,16 @@ function render(t, dt) {
   const facing = Math.atan2(p.facing[0], p.facing[1]);
   player.rotation.y += (((facing - player.rotation.y + Math.PI * 3) % (Math.PI * 2)) - Math.PI) * Math.min(1, dt * 14);
   player.visible = p.fallWait === 0 && !(p.invuln > 0 && Math.floor(t * 12) % 2 === 0);
-  player.userData.pl.intensity = 1.2 + 0.25 * p.carried;
-  player.userData.tail.rotation.x = 0.4 + Math.min(1.1, Math.hypot(p.vel[0], p.vel[2]) / 8) + Math.sin(t * 12) * 0.08;
+  may.update(dt, { speed: Math.hypot(p.vel[0], p.vel[2]), grounded: p.grounded, vy: p.vy, dashing: p.dashLeft > 0, carried: p.carried, t });
+  const gh = game.ground(p.pos[0], p.pos[2]);
+  playerShadow.visible = player.visible && gh !== null && gh !== Infinity;
+  if (playerShadow.visible) { playerShadow.position.set(p.pos[0], gh + 0.04, p.pos[2]); const hgt = Math.max(0, p.pos[1] - gh); playerShadow.scale.setScalar(1 / (1 + hgt * 0.35)); playerShadow.material.opacity = 1 / (1 + hgt * 0.5); }
 
-  if (BENCH) {
+  if (!BENCH && (mode === 'menu' || mode === 'intro')) {
+    const map = NIGHTS[night], a = t * 0.06, R = map.boundR * 1.25;
+    camera.position.set(map.center[0] + R * Math.cos(a), 26, map.center[1] + R * Math.sin(a));
+    camera.lookAt(map.center[0], 0, map.center[1]);
+  } else if (BENCH) {
     const c = benchCamera(bench.t0 == null ? 0 : (performance.now() - bench.t0) / 1000);
     camera.position.set(c[0], c[1], c[2]); camera.lookAt(0, 0, 0);
   } else {
@@ -663,14 +717,16 @@ function render(t, dt) {
     v.headMat.emissive.setHex(C.lampOn).multiplyScalar(0.9 * v.glow);
     v.core.material.opacity = v.glow;
     v.light.intensity = 40 * v.glow;
+    v.halo.material.opacity = 0.75 * v.glow; v.halo.scale.setScalar(4.5 + Math.sin(t * 2 + L.pos[0]) * 0.3);
+    v.pool.material.opacity = 0.28 * v.glow;
     v.ring.material.opacity = game.hasZone(L) ? 0.35 * v.glow : 0; // ring only while the lantern still has a safe zone (fuel >= 30)
     v.pips.forEach((pp, i) => { pp.visible = L.lit || i < cost; pp.material.color.setHex(L.lit || i < L.deposited ? C.lampOn : C.lampOff); });
     if (L.lit) lit++;
   }
   const k = lit / game.lanterns.length;
   ambient.intensity = 0.15 + 0.55 * k;
-  scene.background.copy(AMBIENT_SKY).lerp(DAWN_SKY, k * 0.6);
-  scene.fog.far = 130 + 60 * k;
+  scene.fog.far = 140 + 60 * k;
+  sky.update(t, k, camera); cloudSea.update(t); fireflies?.update(t);
 
   // motes (instanced cores + one Points draw for the halos)
   let nm = 0;
@@ -705,6 +761,7 @@ function render(t, dt) {
     _v.set(s.pos[0], s.pos[1] + Math.sin(t * 3 + s.id.length) * 0.15, s.pos[2]);
     _m.compose(_v, _q, _s);
     shadeBodies.setMatrixAt(ns, _m); shadeEdges.setMatrixAt(ns, _m);
+    _e.makeTranslation(s.pos[0], s.pos[1] - 0.96, s.pos[2]); shadeShadows.setMatrixAt(ns, _e);
     for (let e = 0; e < 2; e++) { _e.makeTranslation(EYE_OFFSETS[e].x, EYE_OFFSETS[e].y, EYE_OFFSETS[e].z).premultiply(_m); shadeEyes.setMatrixAt(ns * 2 + e, _e); }
     _c.setHex(stunned ? C.shadeStun : C.shadeBody); shadeBodies.setColorAt(ns, _c);
     // outline strength by state (was material opacity): blend the outline colour toward the body colour
@@ -713,8 +770,8 @@ function render(t, dt) {
     ns++;
   }
   for (const id of shadeAnim.keys()) if (!seenShades.has(id)) shadeAnim.delete(id);
-  shadeBodies.count = shadeEdges.count = ns; shadeEyes.count = ns * 2;
-  for (const im of [shadeBodies, shadeEdges, shadeEyes]) im.instanceMatrix.needsUpdate = true;
+  shadeBodies.count = shadeEdges.count = shadeShadows.count = ns; shadeEyes.count = ns * 2;
+  for (const im of [shadeBodies, shadeEdges, shadeEyes, shadeShadows]) im.instanceMatrix.needsUpdate = true;
   if (ns) { shadeBodies.instanceColor.needsUpdate = true; shadeEdges.instanceColor.needsUpdate = true; }
   sync(drifterViews, game.drifters.filter((d) => d.state !== 'removed'), makeDrifter);
   for (const d of game.drifters) {
@@ -810,11 +867,13 @@ function frame(now) {
 // idle scene behind the menu; URL options for screenshots / proof: ?night=2&autostart&seed=7&scenario=/tests/scenarios/x.json&fps
 newGame(Number(params.get('night')) || 1);
 if (params.has('fps')) $('fps').classList.remove('hidden');
+if (BENCH) $('minimap').classList.add('hidden');
 window.__showIntro = showIntro; // used by scripts/screens.js
 if (params.has('cb')) settings.colorblind = true;
 if (params.has('large')) settings.largeText = true;
 applyColorblind();
 applyA11y();
+renderNightCards();
 window.__showLeaderboard = showLeaderboard; window.__openSettings = () => openSettings('scr-menu');
 if (params.has('autostart') || BENCH) { show(null); mode = 'playing'; $('hud').classList.remove('hidden'); }
 requestAnimationFrame(frame);

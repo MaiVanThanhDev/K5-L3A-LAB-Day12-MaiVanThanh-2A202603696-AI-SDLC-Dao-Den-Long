@@ -90,37 +90,118 @@
     table.lb tr.me td { color: var(--gold); font-weight: 700; }
     .name-form { display: flex; gap: 10px; justify-content: center; align-items: center; margin-top: 10px; flex-wrap: wrap; }
     .name-form input { font: inherit; font-size: 1rem; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--lamp); background: #0b1028; color: var(--ui); width: 12rem; }
+
+    /* ======== UI upgrade: panels, HUD widgets, menu, transitions ======== */
+    .panel { background: linear-gradient(180deg, rgba(22, 30, 70, .82), rgba(10, 14, 36, .74)); border: 1px solid rgba(255, 179, 71, .3); border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.07); }
+    #hud-flames { padding: 6px 10px; }
+    .flame { filter: drop-shadow(0 0 6px rgba(255,179,71,.7)); }
+    .flame.lost { filter: grayscale(1); }
+    #hud-top { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 4px 14px 4px 6px; }
+    #hud-top svg { width: 3rem; height: 3rem; transform: rotate(-90deg); }
+    #hud-top .ring-bg { stroke: rgba(245,241,230,.15); }
+    #hud-top .ring-fg { stroke: var(--core); stroke-linecap: round; transition: stroke .3s; }
+    #hud-top.danger .ring-fg { stroke: var(--danger); }
+    #hud-clock, #hud-night { position: static; transform: none; }
+    #hud-clock { font-size: 1.6rem; line-height: 1; }
+    #hud-night { font-size: 1rem; }
+    #hud-right { padding: 8px 12px; min-width: 13rem; }
+    #hud-lanterns { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 4px; }
+    .lrow { display: grid; grid-template-columns: 1.1rem 1.9rem 1fr; align-items: center; gap: 6px; font-size: 1rem; text-align: left; }
+    .lrow .dot { width: .8rem; height: .8rem; border-radius: 50%; background: var(--off); box-shadow: none; }
+    .lrow.lit .dot { background: var(--lamp); box-shadow: 0 0 8px var(--lamp); }
+    .lrow.weak .dot { background: var(--danger); box-shadow: 0 0 8px var(--danger); animation: blink 1s ease-in-out infinite; }
+    body.reduced .lrow.weak .dot { animation: none; }
+    .lrow .bar { height: .5rem; border-radius: 4px; background: rgba(245,241,230,.14); overflow: hidden; }
+    .lrow .bar i { display: block; height: 100%; width: 0; background: var(--lamp); border-radius: 4px; }
+    .lrow.weak .bar i { background: var(--danger); }
+    .lrow.off .bar i { background: repeating-linear-gradient(90deg, var(--core) 0 6px, transparent 6px 8px); opacity: .7; }
+    #hud-score::before { content: "★ "; }
+    #hud-bar { padding: 8px 12px; border-radius: 14px; }
+    .cd { width: 4.4rem; height: 4.4rem; border-radius: 50%; justify-content: center; padding: 0; --cd: 0; overflow: visible; }
+    .cd::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(rgba(0,0,0,.66) calc(var(--cd) * 1turn), transparent 0); pointer-events: none; }
+    .cd .shade { display: none; }
+    .cd .key { top: auto; bottom: -1.35rem; left: 50%; transform: translateX(-50%); white-space: nowrap; background: rgba(10,14,36,.8); padding: 0 6px; border-radius: 6px; }
+    .cd .lbl { display: none; }
+    #hud-cds { bottom: 2.2rem; gap: 14px; }
+    #minimap { position: absolute; left: 14px; bottom: 14px; width: 172px; height: 172px; border-radius: 50%; }
+    #captions { bottom: 200px; }
+    #hud-charm { top: 4.6rem; }
+    /* screens */
+    .screen { animation: fadeIn .3s ease-out; }
+    .screen .card { animation: pop .35s cubic-bezier(.2,.9,.3,1.2); }
+    @keyframes fadeIn { from { opacity: 0; } }
+    @keyframes pop { from { opacity: 0; transform: translateY(14px) scale(.97); } }
+    body.reduced .screen, body.reduced .screen .card { animation: none; }
+    .title { background: linear-gradient(180deg, #FFE9B0, #FFB347 55%, #F2C14E); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 18px rgba(255,179,71,.45)); }
+    button .ic { display: inline-flex; width: 1.1rem; height: 1.1rem; vertical-align: -0.18rem; margin-right: .4rem; }
+    button .ic svg { width: 100%; height: 100%; }
+    /* main menu */
+    #scr-menu { background: linear-gradient(90deg, rgba(8,10,26,.88) 0%, rgba(8,10,26,.55) 45%, rgba(8,10,26,.15) 100%); justify-content: flex-start; gap: 3vw; padding: 0 5vw; box-sizing: border-box; }
+    .menu-hero { max-width: 30rem; text-align: left; animation: pop .5s ease-out; }
+    .logo { display: flex; align-items: center; gap: 16px; }
+    .logo-lantern { width: 4.2rem; filter: drop-shadow(0 0 22px rgba(255,179,71,.8)); animation: sway 3.5s ease-in-out infinite; transform-origin: 50% 0; }
+    body.reduced .logo-lantern { animation: none; }
+    @keyframes sway { 50% { transform: rotate(5deg); } }
+    .menu-hero h1 { font-size: 3rem; margin: 0; line-height: 1.05; }
+    .tagline { color: var(--core); opacity: .9; margin: 10px 0 18px; }
+    .menu-btns { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+    .menu-btns button { min-width: 15rem; text-align: left; }
+    details.controls-box { margin-top: 18px; padding: 8px 14px; }
+    details.controls-box summary { cursor: pointer; color: var(--core); }
+    details.controls-box .controls { margin: 8px 0 2px; max-width: none; }
+    .night-cards { display: flex; flex-direction: column; gap: 12px; margin-left: auto; width: 21rem; animation: pop .6s ease-out; }
+    .ncard { padding: 12px 16px; text-align: left; }
+    .ncard .no { color: var(--gold); font-size: 1rem; letter-spacing: 2px; }
+    .ncard h3 { margin: 2px 0 6px; font-size: 1.25rem; color: var(--ui); }
+    .ncard .meta { opacity: .85; }
+    .ncard.won { border-color: var(--gold); box-shadow: 0 0 18px rgba(242,193,78,.25); }
+    .ncard .badge { float: right; color: var(--gold); }
+    /* night intro */
+    .card.intro .chapter { letter-spacing: 4px; color: var(--gold); }
+    .card.intro h1 { font-size: 2.8rem; }
+    .divider { height: 2px; width: 40%; margin: 6px auto 14px; background: linear-gradient(90deg, transparent, var(--lamp), transparent); }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
+    .chip2 { padding: 4px 12px; border-radius: 999px; border: 1px solid rgba(255,179,71,.45); background: rgba(255,179,71,.08); }
   </style>
   <script type="importmap">{ "imports": { "three": "/node_modules/three/build/three.module.js" } }</script>
 </head>
 <body>
   <div id="hud" class="hidden">
-    <div id="hud-flames"></div>
-    <div id="hud-clock">5:00</div>
-    <div id="hud-night"></div>
-    <div id="hud-right"><div>Đèn sáng <b id="hud-lit">0/5</b></div><div id="hud-need"></div><div id="hud-score">0</div></div>
+    <div id="hud-flames" class="panel"></div>
+    <div id="hud-top" class="panel">
+      <svg viewBox="0 0 40 40"><circle class="ring-bg" cx="20" cy="20" r="16" fill="none" stroke-width="4"/><circle id="hud-ring" class="ring-fg" cx="20" cy="20" r="16" fill="none" stroke-width="4" stroke-dasharray="100.5" stroke-dashoffset="0"/></svg>
+      <div><div id="hud-clock">5:00</div><div id="hud-night"></div></div>
+    </div>
+    <div id="hud-right" class="panel"><div>Đèn sáng <b id="hud-lit">0/5</b></div><div id="hud-need"></div><div id="hud-lanterns"></div><div id="hud-score">0</div></div>
+    <canvas id="minimap" class="panel" width="344" height="344"></canvas>
     <div id="hud-charm" class="hidden">Bùa Gió <span id="hud-charm-s"></span></div>
     <div id="hud-msg"></div>
     <div id="hud-prompt" class="hidden"></div>
     <div id="hud-arrow" class="edge-arrow hidden"></div>
     <div id="shade-arrows"></div>
     <div id="captions" aria-live="polite"></div>
-    <div id="hud-bar"></div>
+    <div id="hud-bar" class="panel"></div>
     <div id="hud-cds">
       <div class="cd" id="cd-dash"><span class="key" id="key-dash">Shift</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="#F5F1E6" stroke-width="2.2" stroke-linecap="round"><path d="M3 8h9M5 12h11M3 16h9M14 6l6 6-6 6"/></svg>Lướt<div class="shade"></div></div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="#F5F1E6" stroke-width="2.2" stroke-linecap="round"><path d="M3 8h9M5 12h11M3 16h9M14 6l6 6-6 6"/></svg><span class="lbl">Lướt</span><div class="shade"></div></div>
       <div class="cd" id="cd-pulse"><span class="key" id="key-pulse">Q</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="#FFB347" stroke-width="2.2"><circle cx="12" cy="12" r="3" fill="#FFE9B0"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="10.5" opacity=".5"/></svg>Tỏa sáng<div class="shade"></div></div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="#FFB347" stroke-width="2.2"><circle cx="12" cy="12" r="3" fill="#FFE9B0"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="10.5" opacity=".5"/></svg><span class="lbl">Tỏa sáng</span><div class="shade"></div></div>
     </div>
   </div>
   <div id="flash"></div>
   <div id="fps" class="hidden"></div>
 
   <div id="scr-menu" class="screen">
-    <div class="card">
-      <h1>Đảo Đèn Lồng</h1>
-      <p class="sub">Ba đêm, ba hòn đảo, mười tám ngọn đèn lớn.</p>
-      <p>Giúp Mây thắp đèn và <b>giữ đảo sáng tới bình minh</b>. Đèn cạn dầu sẽ tắt, Bóng Mực hút dầu đèn yếu. Giữ chặt đom đóm trước Gió Lạc.</p>
+    <div class="menu-hero">
+      <div class="logo"><svg class="logo-lantern" viewBox="0 0 64 80"><path d="M32 2v8" stroke="#F2C14E" stroke-width="3"/><path d="M14 18h36l-6-8H20z" fill="#7a2a24"/><ellipse cx="32" cy="42" rx="22" ry="25" fill="#FFB347"/><ellipse cx="32" cy="42" rx="11" ry="14" fill="#FFE9B0"/><path d="M14 42h36M32 17v50" stroke="#c9822f" stroke-width="1.5" opacity=".6"/><path d="M20 66h24l-4 7H24z" fill="#7a2a24"/><path d="M32 73v6" stroke="#F2C14E" stroke-width="3"/></svg><h1 class="title">Đảo Đèn Lồng</h1></div>
+      <p class="tagline">Ba đêm · ba hòn đảo · giữ đảo sáng tới bình minh</p>
+      <p>Thắp đèn, châm dầu, né Bóng Mực tím đen đang hút dầu đèn yếu, và đừng để Gió Lạc cướp đom đóm của Mây.</p>
+      <div class="menu-btns">
+        <button id="btn-play"><span class="ic"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></span>Bắt đầu Đêm 1</button>
+        <button class="ghost" id="btn-menu-lb"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H4v1a4 4 0 0 0 4 4M16 6h4v1a4 4 0 0 1-4 4M12 13v4M8 20h8"/></svg></span>Bảng xếp hạng</button>
+        <button class="ghost" id="btn-menu-settings"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></span>Cài đặt</button>
+      </div>
+      <details class="controls-box panel"><summary>Điều khiển</summary>
       <div class="controls" id="controls">
         <span><kbd>W A S D</kbd></span><span>Di chuyển theo hướng camera</span>
         <span><kbd>Chuột</kbd> · <kbd>Z</kbd>/<kbd>C</kbd></span><span>Xoay camera (bấm vào màn hình để khóa chuột)</span>
@@ -129,21 +210,18 @@
         <span><kbd>E</kbd></span><span>Nạp ánh sáng vào đèn</span>
         <span><kbd>Q</kbd> · chuột trái</span><span>Tỏa sáng (tốn 3 đom đóm)</span>
         <span><kbd>Esc</kbd> · <kbd>P</kbd></span><span>Tạm dừng</span>
-      </div>
-      <div class="btns">
-        <button id="btn-play">Bắt đầu Đêm 1</button>
-        <button class="ghost" id="btn-menu-lb">Bảng xếp hạng</button>
-        <button class="ghost" id="btn-menu-settings">Cài đặt</button>
-      </div>
+      </div></details>
     </div>
+    <div class="night-cards" id="night-cards"></div>
   </div>
 
   <div id="scr-intro" class="screen hidden">
-    <div class="card">
-      <p class="sub" id="intro-num">Đêm 1</p>
-      <h1 id="intro-name">Đảo Bến</h1>
+    <div class="card intro">
+      <div class="chapter" id="intro-num">ĐÊM 1 / 3</div>
+      <h1 id="intro-name" class="title">Đảo Bến</h1>
+      <div class="divider"></div>
       <p class="quote" id="intro-quote"></p>
-      <p class="sub" id="intro-goal"></p>
+      <div class="chips" id="intro-goal"></div>
       <div class="btns"><button id="btn-intro-go">Vào đảo</button></div>
     </div>
   </div>
@@ -181,7 +259,7 @@
 
   <div id="scr-result" class="screen hidden">
     <div class="card">
-      <h2 id="res-title">Chiến thắng!</h2>
+      <h2 id="res-title" class="title">Chiến thắng!</h2>
       <p id="res-why"></p>
       <div class="stats" id="res-stats"></div>
       <div class="name-entry"></div>
@@ -194,7 +272,7 @@
 
   <div id="scr-dawn" class="screen hidden" style="background: radial-gradient(ellipse at bottom, rgba(255,179,71,.55), rgba(27,35,80,.9));">
     <div class="card">
-      <h1>Bình Minh</h1>
+      <h1 class="title">Bình Minh</h1>
       <p>Ba hòn đảo đã sáng đèn. Mặt trời nhô lên khỏi biển mây, Ông Đăng mỉm cười: “Cháu đã giữ được ánh sáng cho cả vùng đảo.”</p>
       <div class="stats" id="dawn-stats"></div>
       <div class="name-entry"></div>
