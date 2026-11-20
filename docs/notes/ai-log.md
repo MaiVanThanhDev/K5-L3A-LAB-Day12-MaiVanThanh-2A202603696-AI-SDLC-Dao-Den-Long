@@ -112,3 +112,15 @@ Công cụ: **Claude Code** (VS Code extension), model Claude Opus 5.5. Harness:
 
 - **Đạt:** 69/69 case; bench và soak đạt ngưỡng trên máy tham khảo; bảng xếp hạng lưu đĩa + xuất; 4 nhóm trợ năng có ảnh; README/CHANGELOG/CREDITS/LICENSE/retro; Release v1.0.0.
 - **Chưa đạt / rủi ro:** video demo chưa có; Docker image chưa build thử; 1 % low 36 FPS chỉ cao hơn ngưỡng 30 một chút trên GPU tích hợp (máy chấm có thể khác).
+
+## Token và chi phí
+
+| Mục | Giá trị |
+|---|---|
+| Gói | Claude theo thuê bao (không tính tiền theo token) |
+| Hạn mức đã dùng | **96 %** (đọc ngày 2026-11-20, sau Phase 4 + nâng cấp giao diện) |
+| Token ước tính | khoảng 10–15 triệu đầu vào (phần lớn cache) · khoảng 0.3–0.4 triệu đầu ra. Gói thuê bao không hiện số token chính xác |
+| Tốn nhiều nhất | tối ưu bot e2e (Phase 2–3), đo bench A/B nhiều lần (Phase 4 + nâng cấp), đọc lại file lớn |
+| Đã tiết kiệm bằng | sửa file theo chỗ neo thay vì viết lại; đọc file theo đoạn; lọc output test chỉ lấy dòng lỗi; không dùng subagent |
+
+Chi tiết và bài học: [retro.md](retro.md) mục 5.
