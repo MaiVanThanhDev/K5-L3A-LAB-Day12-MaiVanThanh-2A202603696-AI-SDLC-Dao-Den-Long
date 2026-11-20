@@ -68,7 +68,7 @@ Tổng điểm game = tổng điểm các Đêm đã thắng. Mọi con số n�
 - `npm test`: **49 case**, mỗi case chạy **CLI headless thật** và kiểm tra JSONL. Gồm 21 case Phase 1 (chạy lại với số chuẩn, [tests/cases.js](tests/cases.js)) và 28 case Phase 2, có ít nhất 1 scenario cho mỗi tính năng mới ([tests/cases2.js](tests/cases2.js)).
 - `npm run proof -- 2`: sinh bảng truy vết yêu cầu → [docs/proof/phase-2/](docs/proof/phase-2/) (kèm ảnh client thật và đo FPS).
 - Một Đêm đầy đủ 21.600 tick chạy headless trong khoảng 0.5 s (yêu cầu ≤ 30 s). Client đạt khoảng 58 FPS ở 1280×720 trên GPU tích hợp Intel UHD 620.
-- CI (GitHub Actions, Ubuntu + macOS) chạy test và kiểm tra tất định mỗi lần push.
+- CI (GitHub Actions, Ubuntu + macOS, file [.github/workflows/ci.yml](../.github/workflows/ci.yml) ở gốc repo) chạy test và kiểm tra tất định 3 Đêm mỗi lần push.
 
 ## Cấu trúc
 
