@@ -11,7 +11,8 @@ export const TICK_HZ = 60;
 export const DT = 1 / TICK_HZ;
 const STEP_UP = 0.35;          // max ledge the player can walk up (ramps rise 0.05 m/tick)
 const STEP_DOWN = 0.35;        // grounded player snaps down to ground within this drop
-const SHADE_CLIMB = 0.5;       // shades cannot climb a wall higher than this (they use ramps)
+const SHADE_CLIMB = 0.5;
+const PLAYER_RADIUS = 0.4;     // only used against client-side decorative obstacles       // shades cannot climb a wall higher than this (they use ramps)
 const DRIFTER_HOVER = 1.5;
 const SHADE_SPAWNING_TICKS = 30;
 const WANDER_SPEED = 1.5, WANDER_TURN_TICKS = 120;
@@ -31,12 +32,15 @@ export class FormatError extends Error {}
 export class Game {
   // bench = true (Ticket-04 benchmark scene only, never used by the headless contract): no spawns, damage, pickup,
   // fuel burn/drain or end of night; shades still move by the normal wander rules.
-  constructor({ tuning, seed = 0, scenario = null, night = 1, bench = false }) {
+  // obstacles = [{x, z, r, h}] (client only: decorative rocks/trees). The headless contract never passes any,
+  // so contract output is unchanged; the player is pushed out of them and can jump over ones lower than its feet.
+  constructor({ tuning, seed = 0, scenario = null, night = 1, bench = false, obstacles = [] }) {
     const t = (this.t = tuning);
     const map = (this.map = NIGHTS[night]);
     if (!map) throw new FormatError(`night ${night} does not exist`);
     this.night = night;
     this.bench = !!bench;
+    this.obstacles = obstacles;
     this.rng = mulberry32(seed);
     this.tick = 0;          // contract tick: every step, paused or not
     this.simTick = 0;       // gameplay steps actually simulated
@@ -349,6 +353,7 @@ export class Game {
         if (ox === 0 && oz === 0) continue;
         if (this.playerCanEnter(p.pos[0] + ox, p.pos[2] + oz, p.pos[1])) { p.pos[0] += ox; p.pos[2] += oz; break; }
       }
+      this.pushOutOfObstacles(p.pos);
       // vertical
       const h = this.ground(p.pos[0], p.pos[2]);
       if (p.grounded) {
@@ -645,6 +650,16 @@ export class Game {
 
     // 12. snapshot is written by the caller
     return end();
+  }
+
+  pushOutOfObstacles(pos) {
+    for (const o of this.obstacles) {
+      if (pos[1] >= o.h) continue; // high enough to pass over (e.g. jumping over a small rock)
+      const dx = pos[0] - o.x, dz = pos[2] - o.z, d = Math.hypot(dx, dz), min = o.r + PLAYER_RADIUS;
+      if (d >= min) continue;
+      const ux = d > 1e-9 ? dx / d : 1, uz = d > 1e-9 ? dz / d : 0;
+      pos[0] = o.x + ux * min; pos[2] = o.z + uz * min;
+    }
   }
 
   // Lantern a wandering shade walks to: scenario target first (if weak or unlit), else nearest weak lit lantern, else nearest unlit.

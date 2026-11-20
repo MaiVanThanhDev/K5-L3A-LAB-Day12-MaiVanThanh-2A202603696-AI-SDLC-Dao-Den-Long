@@ -127,5 +127,28 @@ export const cases4 = [
       return `4 Đêm: ${s.results.join(',')}, 0 crash, RSS ${s.mem_start_mb} → ${s.mem_end_mb} MB, heap ${s.heap_used_start_mb} → ${s.heap_used_end_mb} MB`;
     },
   },
+  {
+    id: 'R8', req: 'Vật cản trang trí (đá, cây) chỉ có ở client: chặn Mây và cho trượt dọc; vật cản thấp nhảy qua được; headless không truyền vật cản nên đầu ra contract không đổi',
+    run() {
+      const sc = { random_motes: false, random_shades: false, motes: [], shades: [], random_drifters: false };
+      const go = (obstacles, inputs) => {
+        const g = new Game({ tuning: TUNING, seed: 1, night: 1, scenario: sc, obstacles });
+        for (let k = 0; k < 120; k++) g.step(inputs(k));
+        return g.player.pos;
+      };
+      const fwd = () => ({ move: [0, 1] });
+      // tree (r 0.5, h 4) at z = 5 straight ahead: player stops at 5 − (0.5 + 0.4) = 4.1
+      const blocked = go([{ x: 0, z: 5, r: 0.5, h: 4 }], fwd);
+      assert.ok(Math.abs(blocked[2] - 4.1) < 0.02 && Math.abs(blocked[0]) < 1e-6, JSON.stringify(blocked));
+      // slightly off-centre: slides around it and keeps going (z ends past the tree)
+      const slide = go([{ x: 0.2, z: 5, r: 0.5, h: 4 }], fwd);
+      assert.ok(slide[2] > 8, JSON.stringify(slide));
+      // low rock (h 0.6) jumped over: no block while the feet are above 0.6
+      const jump = go([{ x: 0, z: 2.5, r: 0.5, h: 0.6 }], (k) => ({ move: [0, 1], jump: k === 10 }));
+      assert.ok(jump[2] > 11, JSON.stringify(jump));
+      const none = go([], fwd);
+      assert.ok(Math.abs(none[2] - 12) < 1e-6);
+      return `cây chặn ở z=${blocked[2].toFixed(2)} (tính tay 4.1); lệch 0.2 m thì trượt qua (z=${slide[2].toFixed(1)}); nhảy qua đá thấp (z=${jump[2].toFixed(1)}); không có vật cản → 12 m như contract`;
+    },
+  },
 ];
-
