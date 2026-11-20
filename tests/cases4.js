@@ -59,7 +59,7 @@ export const cases4 = [
     id: 'R4', req: 'Bảng xếp hạng lưu trên đĩa qua server (POST/GET /api/leaderboard), còn sau khi tắt server; <run_cmd> --export-leaderboard out.json → {"entries": [...]} đúng thứ tự',
     async run() {
       const dir = mkdtempSync(join(tmpdir(), 'ddl-lb-'));
-      const file = join(dir, 'lb.json'), port = 6100 + Math.floor(Math.random() * 800);
+      const file = join(dir, 'lb.json'), port = 20000 + Math.floor(Math.random() * 10000); // outside fetch()'s blocked ports (e.g. 6665–6669)
       const env = { ...process.env, PORT: String(port), LEADERBOARD_FILE: file };
       const srv = spawn(process.execPath, ['server.js'], { cwd: ROOT, env, stdio: 'ignore' });
       try {
