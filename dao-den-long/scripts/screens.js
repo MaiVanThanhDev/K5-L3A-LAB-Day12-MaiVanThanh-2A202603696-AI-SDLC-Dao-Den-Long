@@ -22,6 +22,8 @@ const SHOTS = [
   { name: 'night3-tiers-wind', url: '/?autostart&seed=3&night=3&scenario=/tests/scenarios/screenshot-n3.json', wait: 3500 },
   { name: 'night3-launch', url: '/?autostart&seed=3&night=3&scenario=/tests/scenarios/screenshot-n3-pad.json&yaw=180', wait: 700 },
   { name: 'danger-clock-prompt', url: '/?autostart&seed=3&night=1&scenario=/tests/scenarios/screenshot-danger.json', wait: 2500 },
+  { name: 'p3-fuel-drain', url: '/?autostart&seed=3&night=1&scenario=/tests/scenarios/screenshot-p3-fuel.json&yaw=10', wait: 1800 },
+  { name: 'p3-colorblind', url: '/?autostart&seed=3&night=1&cb&scenario=/tests/scenarios/screenshot-p3-fuel.json&yaw=10', wait: 1800 },
   { name: 'pause', url: '/?autostart&seed=3&night=2', steps: [[key('Escape'), 800]], wait: 300 },
   { name: 'settings', url: '/?autostart&seed=3&night=2', steps: [[key('KeyP'), 500], [click('btn-pause-settings'), 500]], wait: 300 },
   { name: 'result-lost', url: '/?autostart&seed=3&night=1&scenario=/tests/scenarios/screenshot-lose.json', wait: 3500 },

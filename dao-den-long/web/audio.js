@@ -53,6 +53,7 @@ export const sfx = {
   shade: () => { tone({ f: 110, f2: 82, t: 0.8, g: 0.2, type: 'sawtooth' }); tone({ f: 116, f2: 87, t: 0.8, g: 0.12, type: 'sawtooth' }); },
   tick: () => tone({ f: 1000, t: 0.06, g: 0.15, type: 'square' }),
   fall: () => tone({ f: 600, f2: 80, t: 0.9, g: 0.2, type: 'sine' }),
+  out: () => { tone({ f: 520, f2: 130, t: 0.7, g: 0.2, type: 'triangle' }); noise({ t: 0.4, g: 0.06, f: 500 }); },
   wind: () => noise({ t: 2.5, g: 0.18, f: 400, sweep: 1200, q: 0.5 }),
   win: () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone({ f, t: 0.7, g: 0.2, type: 'triangle', delay: i * 0.12 })),
   lose: () => [392, 330, 262, 196].forEach((f, i) => tone({ f, t: 0.6, g: 0.18, type: 'sine', delay: i * 0.18 })),
