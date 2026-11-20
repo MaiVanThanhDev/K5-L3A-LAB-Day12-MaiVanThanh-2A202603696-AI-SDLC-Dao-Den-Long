@@ -14,24 +14,25 @@ const dxz = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
 
 // Standard maps, written again from the ticket text (independent of src/sim/maps.js).
 const STD = {
-  1: { dur: 300, lanterns: [[0, 0, 25], [23.8, 0, 7.7], [14.7, 0, -20.2], [-14.7, 0, -20.2], [-23.8, 0, 7.7]],
+  1: { dur: 240, lanterns: [[0, 0, 25], [23.8, 0, 7.7], [14.7, 0, -20.2], [-14.7, 0, -20.2], [-23.8, 0, 7.7]],
     motes: [...ring(8, 12, 0, 45), ...ring(16, 33, 0, 22.5)] },
-  2: { dur: 330, lanterns: [[0, 0, 20], [17, 0, -10], [-17, 0, -10], [70, 0, 20], [87, 0, -10], [53, 0, -10]],
+  2: { dur: 270, lanterns: [[0, 0, 20], [17, 0, -10], [-17, 0, -10], [70, 0, 20], [87, 0, -10], [53, 0, -10]],
     motes: [0, 70].flatMap((cx) => [...ring(4, 10, 0, 90, 0, cx), ...ring(8, 22, 0, 45, 0, cx)]) },
-  3: { dur: 360, lanterns: [[0, 6, 6], [18, 3, 10], [-18, 3, 10], [35, 0, -10], [-35, 0, -10], [20, 0, -35], [-20, 0, -35]],
+  3: { dur: 300, lanterns: [[0, 6, 6], [18, 3, 10], [-18, 3, 10], [35, 0, -10], [-35, 0, -10], [20, 0, -35], [-20, 0, -35]],
     motes: [...ring(18, 34, 0, 20, 0), ...ring(8, 18, 20, 20, 3), ...ring(4, 5, 45, 90, 6)] },
 };
 
 export const cases2 = [
   {
-    id: 'P1', req: 'Phần 1/4: tuning khớp số chuẩn của ticket, contract_version 1.1, có khóa dash_* và night2/3_duration_s',
+    // v1.2: durations 240/270/300 and the score table are replaced by Ticket-03
+    id: 'P1', req: 'Phần 1/4: tuning khớp số chuẩn của ticket (v1.2: thời lượng 240/270/300, điểm mới), có khóa dash_* và night2/3_duration_s',
     run() {
       const want = { player_speed: 6, jump_speed: 7, gravity: 20, carry_capacity: 10, pickup_radius: 1, lantern_cost: 10, interact_radius: 2,
         safe_radius: 6, pulse_cost: 3, pulse_radius: 5, pulse_cooldown_s: 3, pulse_stun_s: 2, pulse_push_m: 4, shade_speed: 4, shade_speed_night3: 4.5,
-        shade_hit_radius: 1, flames: 3, invuln_s: 1.5, hit_drop_ratio: 0.5, night1_duration_s: 300, night2_duration_s: 330, night3_duration_s: 360,
+        shade_hit_radius: 1, flames: 3, invuln_s: 1.5, hit_drop_ratio: 0.5, night1_duration_s: 240, night2_duration_s: 270, night3_duration_s: 300,
         dash_speed: 14, dash_duration_s: 0.2, dash_cooldown_s: 1.5, fall_enabled: true, lantern_count_night1: 5 };
       for (const [k, v] of Object.entries(want)) assert.equal(T[k], v, `tuning.${k}`);
-      assert.deepEqual(S, { per_mote: 10, per_lantern: 100, per_stun: 5, per_second_left: 2, per_flame_left: 50 });
+      assert.deepEqual(S, { per_mote: 5, per_lantern: 100, per_relight: 40, per_stun: 5, per_stun_drain: 15, per_lit_at_dawn: 50, per_flame_left: 50, per_second_left: 0 });
       return `${Object.keys(want).length} khóa tuning + score khớp bảng số chuẩn`;
     },
   },
@@ -169,15 +170,18 @@ export const cases2 = [
     },
   },
   {
-    id: 'P10', req: 'Phần 1: nạp vào đèn chưa sáng gần nhất trong 2.0 m; bằng nhau thì id nhỏ hơn; bỏ qua đèn đã sáng',
+    // v1.2 [THAY THẾ]: a lit lantern that is not full can be chosen (refuel); only full lanterns are skipped
+    id: 'P10', req: 'Phần 1: nạp vào đèn gần nhất trong 2.0 m; bằng nhau thì id nhỏ hơn; v1.2: đèn sáng chưa đầy dầu nhận châm dầu',
     run() {
       const tie = runHeadless({ scenario: { ...Q, player: { carried: 3 }, lanterns: [{ id: 'L1', pos: [1.5, 0, 0] }, { id: 'L2', pos: [-1.5, 0, 0] }] }, ticks: 2, inputs: [{ tick: 0, interact: true }] });
       assert.equal(events(tie, 'deposit')[0].data.lantern_id, 'L1');
       const tie2 = runHeadless({ scenario: { ...Q, player: { carried: 3 }, lanterns: [{ id: 'L5', pos: [1.5, 0, 0] }, { id: 'L2', pos: [-1.5, 0, 0] }] }, ticks: 2, inputs: [{ tick: 0, interact: true }] });
       assert.equal(events(tie2, 'deposit')[0].data.lantern_id, 'L2');
+      // L1 lit at 0.5 m burns 1/60 in phase 2 before the interaction → not full → it is the nearest eligible lantern → refuel
       const lit = runHeadless({ scenario: { ...Q, player: { carried: 3 }, lanterns: [{ id: 'L1', pos: [0.5, 0, 0], lit: true }, { id: 'L3', pos: [1.9, 0, 0] }] }, ticks: 2, inputs: [{ tick: 0, interact: true }] });
-      assert.equal(events(lit, 'deposit')[0].data.lantern_id, 'L3');
-      return 'L1/L2 cách đều → L1; L5/L2 cách đều → L2; L1 đã sáng ở 0.5 m bị bỏ qua → L3 ở 1.9 m';
+      assert.deepEqual(events(lit, 'refuel')[0].data, { lantern_id: 'L1', amount: 1, fuel: 100 });
+      assert.equal(events(lit, 'deposit').length, 0);
+      return 'L1/L2 cách đều → L1; L5/L2 cách đều → L2; L1 đang sáng (99.98 dầu) ở 0.5 m → châm dầu 1 đom đóm thay vì nạp L3';
     },
   },
   {
@@ -400,7 +404,7 @@ export const cases2 = [
       assert.deepEqual(events(r).map((e) => [e.tick, e.name]), [[11, 'paused'], [31, 'resumed']]);
       const s20 = snapAt(r, 20);
       assert.equal(s20.state, 'paused'); assert.equal(s20.sim_tick, 10);
-      near(s20.time_left_s, 300 - 10 / 60); near(s20.player.pos[2], 1);
+      near(s20.time_left_s, T.night1_duration_s - 10 / 60); near(s20.player.pos[2], 1);
       assert.equal(s20.player.pulse_cd_s, snapAt(r, 10).player.pulse_cd_s);
       assert.equal(snapAt(r, 31).sim_tick, 11); near(snapAt(r, 31).player.pos[2], 1.1);
       assert.ok(snaps(r).every((s) => s.player.pos[1] === 0), 'jump pressed while paused must be ignored');
@@ -412,18 +416,20 @@ export const cases2 = [
     },
   },
   {
-    id: 'P25', req: 'Thắng/thua sau mỗi tick: hết lửa luôn thua (kể cả đèn đã sáng hết); thắng đúng tick hết giờ vẫn là thắng',
+    // v1.2 [THAY THẾ]: win only at dawn with enough lanterns lit; no_flames first
+    id: 'P25', req: 'v1.2 thắng/thua sau mọi cập nhật của tick: hết lửa luôn thua no_flames (kể cả tick bình minh); bình minh với ≥ 3/5 đèn sáng → thắng, 2/5 → thua dawn',
     run() {
-      const all = ['L1', 'L2', 'L3', 'L4', 'L5'].map((id) => ({ id, lit: true }));
-      const a = runHeadless({ scenario: { ...Q, lanterns: all, player: { flames: 0 } }, ticks: 5 });
+      const lit = (n) => ['L1', 'L2', 'L3', 'L4', 'L5'].slice(0, n).map((id) => ({ id, lit: true }));
+      const a = runHeadless({ scenario: { ...Q, lanterns: lit(5), player: { flames: 0 }, time_left_s: 1 / 60 }, ticks: 5 });
       assert.deepEqual(events(a, 'game_over')[0].data, { result: 'lost', reason: 'no_flames' });
-      const four = all.slice(1);
-      const b = runHeadless({ scenario: { ...Q, lanterns: four, time_left_s: 1 / 60, player: { pos: [0, 0, 24], carried: 10 } }, ticks: 5, inputs: [{ tick: 0, interact: true }] });
-      assert.deepEqual(events(b, 'game_over')[0].data, { result: 'won', reason: 'all_lit' });
-      assert.equal(end(b).score, 10 * S.per_mote + S.per_lantern + 0 * S.per_second_left + 3 * S.per_flame_left);
-      return `lửa 0 + đèn sáng hết → lost/no_flames; thắp đèn cuối đúng tick hết giờ → won, điểm ${end(b).score} (= 100 + 100 + 0 + 150)`;
+      const b = runHeadless({ scenario: { ...Q, lanterns: lit(3), time_left_s: 1 / 60 }, ticks: 5 });
+      assert.deepEqual(events(b, 'game_over').map((e) => [e.tick, e.data]), [[1, { result: 'won', reason: 'dawn_survived' }]]);
+      const c = runHeadless({ scenario: { ...Q, lanterns: lit(2), time_left_s: 1 / 60 }, ticks: 5 });
+      assert.deepEqual(events(c, 'game_over')[0].data, { result: 'lost', reason: 'dawn' });
+      return 'lửa 0 + 5/5 đèn ở tick bình minh → lost/no_flames; 3/5 → won/dawn_survived; 2/5 → lost/dawn';
     },
   },
+
   {
     id: 'P26', req: 'Lịch sinh Bóng Mực Đêm 2 (mỗi 7 s, tối đa 8) và Đêm 3 (mỗi 6 s, tối đa 10), cách người chơi ≥ 15 m, tại điểm chuẩn; Đêm 3 tốc độ 4.5 m/s',
     run() {

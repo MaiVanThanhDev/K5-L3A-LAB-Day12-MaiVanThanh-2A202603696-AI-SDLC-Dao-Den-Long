@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Headless runner — Test Contract v1.1.
+// Headless runner — Test Contract v1.2.
 // <headless_cmd> --seed <int> --night 1|2|3 [--scenario f.json] [--inputs f.json] --ticks <int> --out f.jsonl [--snapshot-every <int>]
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

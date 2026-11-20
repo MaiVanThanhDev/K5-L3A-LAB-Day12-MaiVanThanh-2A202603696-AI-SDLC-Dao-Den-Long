@@ -1,11 +1,11 @@
-// Parsing/validation of contract input files (Test Contract v1.1). Any problem -> FormatError (headless exits 2).
+// Parsing/validation of contract input files (Test Contract v1.2). Any problem -> FormatError (headless exits 2).
 import { FormatError } from './game.js';
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const isVec3 = (v) => Array.isArray(v) && v.length === 3 && v.every(isNum);
 const isNat = (v) => Number.isInteger(v) && v >= 0;
 const BUTTONS = ['jump', 'interact', 'pulse', 'dash', 'pause'];
-const SHADE_STATES = ['spawning', 'wander', 'chase', 'recoil', 'stunned'];
+const SHADE_STATES = ['spawning', 'wander', 'chase', 'recoil', 'stunned', 'drain'];
 const DRIFTER_STATES = ['idle', 'chase', 'flee', 'removed'];
 
 export function parseInputs(obj) {
@@ -52,7 +52,7 @@ export function parseScenario(obj) {
   if (player !== undefined) {
     if (!player || typeof player !== 'object' || Array.isArray(player)) throw new FormatError('scenario: player must be an object');
     if (player.pos !== undefined && !isVec3(player.pos)) throw new FormatError('scenario: player.pos must be [x,y,z]');
-    for (const k of ['carried', 'flames', 'invuln_ticks', 'dash_cd_ticks', 'pulse_cd_ticks', 'charm_ticks']) optNat(player, k, 'player');
+    for (const k of ['carried', 'flames', 'invuln_ticks', 'dash_cd_ticks', 'pulse_cd_ticks', 'charm_ticks', 'successful_lights']) optNat(player, k, 'player');
   }
   for (const k of ['random_motes', 'random_shades', 'random_drifters', 'wind_enabled']) optBool(obj, k, '');
   if (motes !== undefined) {
@@ -70,6 +70,8 @@ export function parseScenario(obj) {
       optId(s, 'shade');
       if (s.state !== undefined && !SHADE_STATES.includes(s.state)) throw new FormatError(`scenario: shade state must be one of ${SHADE_STATES.join(', ')}`);
       optNat(s, 'state_ticks_left', 'shade');
+      if (s.target_lantern_id !== undefined && typeof s.target_lantern_id !== 'string') throw new FormatError('scenario: shade target_lantern_id must be a string');
+      if (s.state === 'drain' && s.target_lantern_id === undefined) throw new FormatError('scenario: a shade in state drain needs target_lantern_id');
     }
   }
   if (drifters !== undefined) {
@@ -96,6 +98,8 @@ export function parseScenario(obj) {
       if (l.pos !== undefined && !isVec3(l.pos)) throw new FormatError('scenario: lantern pos must be [x,y,z]');
       optNat(l, 'deposited', 'lantern');
       if (l.lit !== undefined && typeof l.lit !== 'boolean') throw new FormatError('scenario: lantern lit must be boolean');
+      if (l.ever_lit !== undefined && typeof l.ever_lit !== 'boolean') throw new FormatError('scenario: lantern ever_lit must be boolean');
+      if (l.fuel !== undefined && !(isNum(l.fuel) && l.fuel >= 0 && l.fuel <= 100)) throw new FormatError('scenario: lantern fuel must be a number in [0, 100]');
     }
   }
   if (obj.time_left_s !== undefined && !(isNum(obj.time_left_s) && obj.time_left_s >= 0)) throw new FormatError('scenario: time_left_s must be a non-negative number');

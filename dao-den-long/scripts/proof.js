@@ -7,10 +7,11 @@ import { execSync } from 'node:child_process';
 import os from 'node:os';
 import { cases as cases1, ROOT, runHeadless } from '../tests/cases.js';
 import { cases2 } from '../tests/cases2.js';
+import { cases3 } from '../tests/cases3.js';
 
-const phase = process.argv[2] || '2';
+const phase = process.argv[2] || '3';
 // Phase N proof = every case so far (Phase 1 regression + new rules).
-const cases = Number(phase) >= 2 ? [...cases1, ...cases2] : cases1;
+const cases = [cases1, cases2, cases3].slice(0, Math.min(3, Number(phase))).flat();
 const dir = join(ROOT, 'docs', 'proof', `phase-${phase}`);
 mkdirSync(join(dir, 'out'), { recursive: true });
 

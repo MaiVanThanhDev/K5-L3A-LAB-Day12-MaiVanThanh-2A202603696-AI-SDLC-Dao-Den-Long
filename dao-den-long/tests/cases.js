@@ -137,7 +137,7 @@ export const cases = [
       const d = events(r, 'deposit'); const l = events(r, 'lantern_lit');
       assert.deepEqual(d.map((e) => e.data), [{ lantern_id: 'L1', amount: T.lantern_cost, deposited: T.lantern_cost }]);
       assert.equal(d[0].tick, 3);
-      assert.deepEqual(l.map((e) => e.data), [{ lantern_id: 'L1' }]);
+      assert.deepEqual(l.map((e) => e.data), [{ lantern_id: 'L1', relight: false }]); // v1.2: lantern_lit carries relight
       assert.equal(snapAt(r, 10).player.carried, 2);
       assert.equal(end(r).score, S.per_lantern + S.per_mote * T.lantern_cost); // v1.1: +per_mote per deposited mote
       return `deposit ${JSON.stringify(d[0].data)} @tick ${d[0].tick}, lantern_lit L1, score=${end(r).score}`;
@@ -245,18 +245,23 @@ export const cases = [
     },
   },
   {
-    id: 'G11', req: 'Thắng khi thắp hết đèn (all_lit); điểm thưởng thời gian + lửa; đèn đặt sẵn không được điểm',
+    // v1.2 [THAY THẾ]: no early win any more — win only at dawn with ≥ ceil(0.6 × lanterns) lit; dawn bonus 50 + floor(fuel) per lit lantern
+    id: 'G11', req: 'v1.2: thắp hết đèn không kết thúc Đêm; thắng ở bình minh (dawn_survived) với điểm 50 + floor(fuel) mỗi đèn sáng + 50 mỗi lửa; đèn đặt sẵn không được điểm thắp',
     run() {
-      const lanterns = ['L2', 'L3', 'L4', 'L5'].map((id) => ({ id, lit: true }));
-      const sc = { ...quiet, lanterns, player: { pos: [0, 0, 24], carried: T.lantern_cost }, time_left_s: 100 };
-      const r = runHeadless({ scenario: sc, inputs: [{ tick: 0, interact: true }], ticks: 50 });
+      const all = ['L1', 'L2', 'L3', 'L4', 'L5'].map((id) => ({ id, lit: true }));
+      const early = runHeadless({ scenario: { ...quiet, lanterns: all }, ticks: 30 });
+      assert.equal(events(early, 'game_over').length, 0); assert.equal(end(early).state, 'playing');
+      const three = ['L1', 'L2', 'L3'].map((id) => ({ id, lit: true }));
+      const r = runHeadless({ scenario: { ...quiet, lanterns: three, time_left_s: 1 }, ticks: 100 });
       assert.equal(snapAt(r, 0).score, 0);
-      const expected = S.per_mote * T.lantern_cost + S.per_lantern + S.per_second_left * Math.floor(100 - 1 / 60) + S.per_flame_left * T.flames;
-      assert.deepEqual(events(r, 'game_over').map((e) => [e.tick, e.data]), [[1, { result: 'won', reason: 'all_lit' }]]);
-      assert.deepEqual(end(r), { type: 'end', ticks: 1, state: 'won', score: expected });
-      return `won ở tick 1, score=${end(r).score} (= ${S.per_mote}×${T.lantern_cost} + ${S.per_lantern} + ${S.per_second_left}×99 + ${S.per_flame_left}×${T.flames})`;
+      // fuel 100 − 60 ticks × 1/60 = 99 → each lit lantern 50 + 99; 3 flames × 50
+      const expected = 3 * (S.per_lit_at_dawn + 99) + S.per_flame_left * T.flames;
+      assert.deepEqual(events(r, 'game_over').map((e) => [e.tick, e.data]), [[60, { result: 'won', reason: 'dawn_survived' }]]);
+      assert.deepEqual(end(r), { type: 'end', ticks: 60, state: 'won', score: expected });
+      return `5/5 đèn sáng 30 tick vẫn playing; 3/5 sáng tới bình minh → won dawn_survived tick 60, điểm ${end(r).score} (= 3×(50+99) + 150)`;
     },
   },
+
 
   {
     id: 'G12', req: 'Bóng Mực sợ đèn: không vào trong safe_radius của đèn đã thắp',
