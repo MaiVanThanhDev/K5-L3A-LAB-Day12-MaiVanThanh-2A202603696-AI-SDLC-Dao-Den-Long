@@ -10,7 +10,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm install
       - run: npm test
       - name: Headless smoke + determinism
@@ -21,3 +21,5 @@ jobs:
             cmp a$n.jsonl b$n.jsonl
             tail -1 a$n.jsonl
           done
+      - name: Soak (10 nights)
+        run: node scripts/soak.js --seed 7 --nights 10 --out soak-ci.json && cat soak-ci.json | head -12

@@ -101,3 +101,25 @@ Quyết định thiết kế: [ADR 0001](../adr/0001-lantern-fuel-and-dawn-win.m
 | C10 | "+15 nếu đang drain" | Là **tổng** 15 cho con đó (không phải 5 + 15). |
 | C11 | Mắt Bóng Mực ở chế độ thường | Dùng `#7A3CFF` (cùng màu viền), vì ticket nói "viền và mắt đổi từ #7A3CFF". |
 | C12 | Sức chứa | Chỉ tăng trong một Đêm, nên số đang mang không bao giờ vượt sức chứa. |
+
+## Phase 4 — Ticket-04 "Bình minh: phát hành v1.0.0" + Test Contract v1.3
+
+### D. Chỗ Ticket-04 mơ hồ → giả định
+
+| # | Chỗ mơ hồ | Giả định |
+|---|---|---|
+| D1 | "Mở cửa sổ 1280×720" với bản web | `bench_cmd` tự mở server và một cửa sổ Chrome/Edge thật (không headless), ép vùng vẽ đúng 1280×720 (`Emulation.setDeviceMetricsOverride`, devicePixelRatio 1). |
+| D2 | Tắt vsync | Cờ Chrome `--disable-gpu-vsync --disable-frame-rate-limit`. Kiểm chứng: FPS đo được vượt 60 (123 FPS trên máy tham khảo). |
+| D3 | `load_ms` | Từ lúc tiến trình `bench.js` khởi động (`performance.timeOrigin`) tới khung hình đầu tiên của cảnh bench, gồm cả khởi động server và Chrome. |
+| D4 | `peak_mem_mb` cho bản web | Không ghi `null`: lấy tổng RSS của cả cây tiến trình Chrome (trình duyệt + GPU + renderer; trên Windows là working set), lấy mẫu mỗi 5 s trong lúc đo. Đây là cận trên, vì gồm cả phần của Chrome. |
+| D5 | "Bóng Mực di chuyển theo luật wander" trong bench | Giữ luật wander của Ticket-03 (đi về đèn tắt gần nhất L4/L5, đứng chờ). **Tắt chuyển sang chase** khi gần Mây, vì Mây đứng yên ở tâm và ticket yêu cầu 200 con ở trạng thái wander. |
+| D6 | Rải đều | Phân bố đều theo diện tích trên đĩa bán kính 39 m (r = 39·√u, góc = 2πv), dùng `mulberry32(42)`. Con nằm trong vùng sáng L1–L3 bị đẩy ra theo luật thường. |
+| D7 | Sáng tạo thêm trong bench | Tắt cây và đá trang trí; HUD vẫn hiện như khi chơi thật. Hạt tiến độ và vòng sáng là chỉ báo luật nên vẫn giữ. |
+| D8 | RSS trong soak | Script tự chạy lại chính nó với cấu hình V8 cố định (`--expose-gc --max-semi-space-size=1 --no-opt --no-maglev`, bỏ dần cờ nếu Node không nhận). Đo sau `gc()`. Lý do: không có cấu hình này, RSS tăng khoảng 10–16 MB do young-gen và bộ nhớ trình biên dịch JIT, trong khi heap JS đứng yên khoảng 5 MB (đo 30 và 60 Đêm: RSS có trần, không rò rỉ). Số heap được ghi trong `soak.json`. |
+| D9 | Input ngẫu nhiên soak | `mulberry32(seed_i × 2654435761)`; hướng mới mỗi 30 tick (vector đơn vị góc ngẫu nhiên); mỗi nút được bấm (true) trong tick đó với xác suất cho trước, còn lại false. Mỗi 10 tick serialize một snapshot như headless. |
+| D10 | Lưu bảng xếp hạng | Server lưu `data/leaderboard.json` (ghi qua file tạm rồi rename). Bản web tĩnh không có server thì lưu `localStorage` theo cùng luật (`src/leaderboard-rules.js`). |
+| D11 | `achieved_at` | Giờ của server, ISO 8601 có mili giây và độ lệch múi giờ địa phương (ví dụ `2026-11-20T16:49:03.123+07:00`). Bằng điểm thì so thời điểm, rồi tới thứ tự lưu. |
+| D12 | `seed` của một ván | Seed của chiến dịch (chọn khi bấm "Bắt đầu"); Đêm n dùng seed + n. |
+| D13 | Tên tiếng Việt | Chấp nhận chữ Unicode (`\p{L}`, dấu kết hợp) + số + `_`, độ dài 3–12 ký tự sau chuẩn hóa NFC. |
+| D14 | Đổi phím | Một phím chính cho mỗi hành động; trùng phím vẫn lưu nhưng tô đỏ và hiện cảnh báo. `Esc` luôn tạm dừng (trình duyệt dùng Esc để nhả chuột). Chuột trái vẫn là phím phụ cho Tỏa Sáng. |
+| D15 | Video demo | Cần người chơi thật quay màn hình. AI không quay được (không có thiết bị ghi, không có ffmpeg). |

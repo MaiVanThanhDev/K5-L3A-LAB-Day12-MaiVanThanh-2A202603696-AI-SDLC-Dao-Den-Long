@@ -2,6 +2,30 @@
 
 Ghi theo phase (tag git). Mục **BREAKING** liệt kê thay đổi phá vỡ tương thích với contract, scenario, output headless hoặc test của phase trước.
 
+## [phase-4] / v1.0.0 — Ticket-04 "Bình minh: phát hành v1.0.0" · Test Contract v1.3
+
+Spec: [docs/spec/phase-4.md](docs/spec/phase-4.md) · Bằng chứng: [docs/proof/phase-4/](docs/proof/phase-4/) · Retro: [docs/notes/retro.md](docs/notes/retro.md)
+
+### BREAKING
+
+| # | Thay đổi | Trước | Sau |
+|---|---|---|---|
+| B1 | **Cấu trúc repo** | Game nằm trong thư mục con `dao-den-long/`; README gốc là đề lab | Game ở **gốc repo**: `game.contract.json` ở gốc đúng quy định contract; `headless_cmd` chạy từ gốc. Đề lab chuyển vào `docs/lab/`. Lịch sử giữ nguyên (`git mv`). Tag `phase-1…3` vẫn trỏ cấu trúc cũ. |
+| B2 | `contract_version` | `"1.2"` | `"1.3"`, thêm `bench_cmd` (`node scripts/bench.js`) và `soak_cmd` (`node scripts/soak.js`). Mọi yêu cầu v1.0–v1.2 giữ nguyên. |
+| B3 | Node.js | ≥ 20 | **≥ 22** (bench dùng `WebSocket` có sẵn của Node). CI chuyển lên Node 22. |
+| B4 | Phím mặc định | Tạm dừng `Esc`/`P` cố định; mũi tên di chuyển | Mọi hành động đổi được trong Cài đặt (lưu lại). Mặc định WASD, Space, Shift trái, E, Q, P; `Esc` luôn tạm dừng. Phím mũi tên không còn gán sẵn. |
+| B5 | Server | Chỉ phục vụ file tĩnh | Thêm `GET/POST /api/leaderboard` và `--export-leaderboard <file>`; dữ liệu ở `data/leaderboard.json` (`$LEADERBOARD_FILE`). |
+
+### Thêm
+
+- **Benchmark** (`bench_cmd`): cửa sổ Chrome 1280×720, vsync tắt, cảnh chuẩn (Đêm 1, 200 Bóng Mực wander rải đều seed 42, 100 đom đóm, L1–L3 sáng fuel 100, camera bay vòng r 30 m / Y 15 m / 15 s), khởi động 3 s, ghi `bench.json` (avg_fps, p1_low_fps, frame_ms_p95, frames, load_ms, peak_mem_mb, vsync_off, renderer, os). Cờ `bench` trong lõi tắt sinh thêm, sát thương, nhặt, hao dầu, kết thúc Đêm.
+- **Soak** (`soak_cmd`): N Đêm trong một tiến trình (1→2→3), seed 7 + i, input ngẫu nhiên theo seed, ghi `soak.json` (kèm heap JS để phân biệt rò rỉ với phần khởi động của V8).
+- **Bảng xếp hạng cục bộ**: nhập tên sau Bình Minh hoặc khi thua; top 10, điểm giảm dần, bằng điểm thì ai đạt trước đứng trên; lưu trên đĩa; màn Bảng xếp hạng từ menu; xuất JSON. Không có server thì lưu trong trình duyệt.
+- **Trợ năng**: đổi phím (báo trùng, khôi phục mặc định); phụ đề và chỉ báo hình ảnh (Bóng Mực xuất hiện kèm mũi tên ở mép màn hình, gió, 10 s cuối, đèn < 30 dầu); giảm chuyển động (tắt rung camera, chớp màn hình, nhấp nháy đồng hồ); chữ UI tối thiểu 18 px, tùy chọn ×1.25.
+- **Hiệu năng**: Bóng Mực và đom đóm vẽ bằng instancing; HUD chỉ ghi DOM khi giá trị đổi. Bench trên UHD 620 tăng từ 36 lên khoảng 123 FPS.
+- **Đóng gói**: `Dockerfile`, zip chạy được trong Release v1.0.0, README đủ mục, CREDITS chi tiết.
+- 7 case Phase 4 (`tests/cases4.js`, R1–R7). Không case cũ nào bị đổi.
+
 ## [phase-3] — Ticket-03 "Đèn cạn dầu" · Test Contract v1.2
 
 Quyết định thiết kế: [docs/adr/0001-lantern-fuel-and-dawn-win.md](docs/adr/0001-lantern-fuel-and-dawn-win.md) · Spec: [docs/spec/phase-3.md](docs/spec/phase-3.md)
@@ -49,4 +73,4 @@ BREAKING so với phase-1: thay mọi số tự chọn bằng số chuẩn; `--n
 
 ## [phase-1] — PRD-0 · Test Contract v1.0
 
-Bản đầu tiên: Đêm 1, headless theo contract v1.0.
+Bản đầu tiên: Đêm 1 (Đảo Bến, 5 đèn), nhặt đom đóm, nạp và thắp đèn, Bóng Mực đuổi, Tỏa Sáng, thắng/thua/điểm, chơi lại; headless theo contract v1.0 (snapshot/event/end JSONL, mã thoát 2 khi file sai, tất định theo seed); 21 case kiểm chứng; harness (AGENTS.md, hook test-gate, skill verify); CI.

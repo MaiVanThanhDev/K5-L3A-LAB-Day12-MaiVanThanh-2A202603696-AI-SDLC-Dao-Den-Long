@@ -89,3 +89,26 @@ Công cụ: **Claude Code** (VS Code extension), model Claude Opus 5.5. Harness:
 - **Đạt:** 62/62 case (13 mới; 7 case cũ được cập nhật có lý do; 42 case cũ không đổi). Có ADR, CHANGELOG breaking, spec có AC. Chế độ mù màu, thanh dầu và đèn rách đều có ảnh. Khoảng 55–58 FPS.
 - **Chưa đạt / rủi ro:** bot vẫn chưa thắng Đêm nào (Đêm 1 sống tới bình minh nhưng 2/5 đèn), nên chưa có bằng chứng tự động rằng thắng được mà không dựng scenario. Âm thanh `lantern_out` và lưu cài đặt chỉ kiểm tra bằng code.
 - **Quan sát thiết kế:** lượng đom đóm sinh ra (20 + 1 mỗi 4 s, tối đa 24 điểm) vừa sát lượng cần để giữ 3 đèn suốt 240 s, cộng thêm Bóng Mực canh đèn tắt. Đêm 1 khó hơn hẳn Phase 2. Có thể cần playtest người thật.
+
+## Phase 4
+
+| Bước | Lời nhắc / việc | Kết quả |
+|---|---|---|
+| 1 | Dán Ticket-04 | Phát hiện contract yêu cầu `game.contract.json` ở **gốc repo**, README gốc là đề lab, hook trong thư mục con chưa từng chạy. Chuyển game lên gốc bằng `git mv`, đề lab vào `docs/lab/`. |
+| 2 | Cảnh bench trong lõi | Cờ `bench` tắt sinh thêm/sát thương/nhặt/hao dầu/kết thúc. Bỏ phép sắp xếp đèn trong vòng lặp wander: 3.35 → 0.19 ms/bước. |
+| 3 | Soak | Lần đầu RSS 1.26× (vượt). Đo 30/60 Đêm + heap: không rò rỉ, là phần khởi động của V8. Cố định cấu hình bộ nhớ V8 → 1.04–1.06×. |
+| 4 | Bench | Lần đầu 36 FPS / 1 % low 8. Instancing + HUD cache + lấy mẫu RAM thưa hơn → 117–123 FPS / 33–36. |
+| 5 | Bảng xếp hạng, trợ năng | API trên đĩa + xuất JSON; đổi phím, phụ đề + mũi tên, giảm chuyển động, chữ 18 px/×1.25. Mở từng ảnh chụp ra xem. |
+| 6 | Đóng gói | README đủ mục, CHANGELOG 4 phase, CREDITS, Dockerfile, zip Release, retro. |
+
+### Lỗi của AI và cách phát hiện
+
+1. **Bench đầu tiên trượt ngưỡng** (36 FPS): đo rồi mới tối ưu đúng chỗ (draw call, DOM).
+2. **Soak trượt ngưỡng RSS**: AI không "chỉnh số" mà đo thêm để chứng minh không rò rỉ, rồi ghi rõ cấu hình V8 trong báo cáo và giả định D8.
+3. **Bóng Mực trong bench chuyển sang chase** vì Mây đứng ở tâm: kiểm tra trạng thái sau 600 tick thì thấy; tắt phát hiện trong bench (D5).
+4. **Không kiểm chứng được**: Docker image (daemon tắt), video (không ghi màn hình được). Ghi là "chưa có" thay vì nói đã xong.
+
+### Đánh giá Phase 4
+
+- **Đạt:** 69/69 case; bench và soak đạt ngưỡng trên máy tham khảo; bảng xếp hạng lưu đĩa + xuất; 4 nhóm trợ năng có ảnh; README/CHANGELOG/CREDITS/LICENSE/retro; Release v1.0.0.
+- **Chưa đạt / rủi ro:** video demo chưa có; Docker image chưa build thử; 1 % low 36 FPS chỉ cao hơn ngưỡng 30 một chút trên GPU tích hợp (máy chấm có thể khác).
