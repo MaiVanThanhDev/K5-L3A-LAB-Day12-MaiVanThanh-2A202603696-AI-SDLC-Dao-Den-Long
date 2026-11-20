@@ -1,15 +1,18 @@
-// Parsing/validation of contract input files. Any problem -> FormatError (headless exits 2).
+// Parsing/validation of contract input files (Test Contract v1.1). Any problem -> FormatError (headless exits 2).
 import { FormatError } from './game.js';
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const isVec3 = (v) => Array.isArray(v) && v.length === 3 && v.every(isNum);
-const BUTTONS = ['jump', 'interact', 'pulse', 'dash'];
+const isNat = (v) => Number.isInteger(v) && v >= 0;
+const BUTTONS = ['jump', 'interact', 'pulse', 'dash', 'pause'];
+const SHADE_STATES = ['spawning', 'wander', 'chase', 'recoil', 'stunned'];
+const DRIFTER_STATES = ['idle', 'chase', 'flee', 'removed'];
 
 export function parseInputs(obj) {
   if (!obj || typeof obj !== 'object' || !Array.isArray(obj.frames)) throw new FormatError('inputs: "frames" must be an array');
   let last = -1;
   for (const [i, f] of obj.frames.entries()) {
-    if (!f || typeof f !== 'object') throw new FormatError(`inputs: frame ${i} is not an object`);
+    if (!f || typeof f !== 'object' || Array.isArray(f)) throw new FormatError(`inputs: frame ${i} is not an object`);
     if (!Number.isInteger(f.tick) || f.tick < 0) throw new FormatError(`inputs: frame ${i} has invalid tick`);
     if (f.tick <= last) throw new FormatError(`inputs: frame ${i} tick ${f.tick} is not strictly increasing`);
     last = f.tick;
@@ -25,7 +28,7 @@ export function parseInputs(obj) {
 
 // Turns frames into a per-tick input source. Absent fields keep their previous value.
 export function inputStream(frames) {
-  const cur = { move: [0, 0], cam_yaw_deg: 0, jump: false, interact: false, pulse: false, dash: false };
+  const cur = { move: [0, 0], cam_yaw_deg: 0, jump: false, interact: false, pulse: false, dash: false, pause: false };
   let i = 0;
   return (tick) => {
     while (i < frames.length && frames[i].tick <= tick) {
@@ -38,32 +41,63 @@ export function inputStream(frames) {
   };
 }
 
+const optNat = (o, k, where) => { if (o[k] !== undefined && !isNat(o[k])) throw new FormatError(`scenario: ${where}.${k} must be a non-negative integer`); };
+const optBool = (o, k, where) => { if (o[k] !== undefined && typeof o[k] !== 'boolean') throw new FormatError(`scenario: ${where}${k} must be boolean`); };
+const optId = (o, where) => { if (o.id !== undefined && typeof o.id !== 'string') throw new FormatError(`scenario: ${where} id must be a string`); };
+const arr = (v, name) => { if (!Array.isArray(v)) throw new FormatError(`scenario: ${name} must be an array`); return v; };
+
 export function parseScenario(obj) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new FormatError('scenario: must be a JSON object');
-  const { player, motes, shades, lanterns } = obj;
+  const { player, motes, shades, lanterns, drifters, charms } = obj;
   if (player !== undefined) {
-    if (!player || typeof player !== 'object') throw new FormatError('scenario: player must be an object');
+    if (!player || typeof player !== 'object' || Array.isArray(player)) throw new FormatError('scenario: player must be an object');
     if (player.pos !== undefined && !isVec3(player.pos)) throw new FormatError('scenario: player.pos must be [x,y,z]');
-    for (const k of ['carried', 'flames']) if (player[k] !== undefined && !(Number.isInteger(player[k]) && player[k] >= 0)) throw new FormatError(`scenario: player.${k} must be a non-negative integer`);
+    for (const k of ['carried', 'flames', 'invuln_ticks', 'dash_cd_ticks', 'pulse_cd_ticks', 'charm_ticks']) optNat(player, k, 'player');
   }
-  for (const k of ['random_motes', 'random_shades']) if (obj[k] !== undefined && typeof obj[k] !== 'boolean') throw new FormatError(`scenario: ${k} must be boolean`);
-  if (motes !== undefined && !(Array.isArray(motes) && motes.every(isVec3))) throw new FormatError('scenario: motes must be an array of [x,y,z]');
+  for (const k of ['random_motes', 'random_shades', 'random_drifters', 'wind_enabled']) optBool(obj, k, '');
+  if (motes !== undefined) {
+    for (const m of arr(motes, 'motes')) {
+      if (isVec3(m)) continue;
+      if (!m || typeof m !== 'object' || !isVec3(m.pos)) throw new FormatError('scenario: each mote must be [x,y,z] or {pos:[x,y,z]}');
+      if (m.kind !== undefined && m.kind !== 'random' && m.kind !== 'dropped') throw new FormatError('scenario: mote kind must be random or dropped');
+      optNat(m, 'ttl_ticks', 'mote');
+      if (m.ttl_s !== undefined && !(isNum(m.ttl_s) && m.ttl_s > 0)) throw new FormatError('scenario: mote ttl_s must be a positive number');
+    }
+  }
   if (shades !== undefined) {
-    if (!Array.isArray(shades)) throw new FormatError('scenario: shades must be an array');
-    for (const s of shades) {
+    for (const s of arr(shades, 'shades')) {
       if (!s || !isVec3(s.pos)) throw new FormatError('scenario: each shade needs pos [x,y,z]');
-      if (s.id !== undefined && typeof s.id !== 'string') throw new FormatError('scenario: shade id must be a string');
+      optId(s, 'shade');
+      if (s.state !== undefined && !SHADE_STATES.includes(s.state)) throw new FormatError(`scenario: shade state must be one of ${SHADE_STATES.join(', ')}`);
+      optNat(s, 'state_ticks_left', 'shade');
+    }
+  }
+  if (drifters !== undefined) {
+    for (const d of arr(drifters, 'drifters')) {
+      if (!d || !isVec3(d.pos)) throw new FormatError('scenario: each drifter needs pos [x,y,z]');
+      optId(d, 'drifter');
+      if (d.state !== undefined && !DRIFTER_STATES.includes(d.state)) throw new FormatError(`scenario: drifter state must be one of ${DRIFTER_STATES.join(', ')}`);
+      optNat(d, 'stolen', 'drifter');
+      optNat(d, 'state_ticks_left', 'drifter');
+    }
+  }
+  if (charms !== undefined) {
+    for (const c of arr(charms, 'charms')) {
+      if (!c || !isVec3(c.pos)) throw new FormatError('scenario: each charm needs pos [x,y,z]');
+      optId(c, 'charm');
+      optBool(c, 'available', 'charm.');
+      optNat(c, 'respawn_ticks', 'charm');
+      if (c.respawn_s !== undefined && !(isNum(c.respawn_s) && c.respawn_s >= 0)) throw new FormatError('scenario: charm respawn_s must be a non-negative number');
     }
   }
   if (lanterns !== undefined) {
-    if (!Array.isArray(lanterns)) throw new FormatError('scenario: lanterns must be an array');
-    for (const l of lanterns) {
+    for (const l of arr(lanterns, 'lanterns')) {
       if (!l || typeof l.id !== 'string') throw new FormatError('scenario: each lantern needs a string id');
       if (l.pos !== undefined && !isVec3(l.pos)) throw new FormatError('scenario: lantern pos must be [x,y,z]');
-      if (l.deposited !== undefined && !(Number.isInteger(l.deposited) && l.deposited >= 0)) throw new FormatError('scenario: lantern deposited must be a non-negative integer');
+      optNat(l, 'deposited', 'lantern');
       if (l.lit !== undefined && typeof l.lit !== 'boolean') throw new FormatError('scenario: lantern lit must be boolean');
     }
   }
-  if (obj.time_left_s !== undefined && !isNum(obj.time_left_s)) throw new FormatError('scenario: time_left_s must be a number');
+  if (obj.time_left_s !== undefined && !(isNum(obj.time_left_s) && obj.time_left_s >= 0)) throw new FormatError('scenario: time_left_s must be a non-negative number');
   return obj;
 }
