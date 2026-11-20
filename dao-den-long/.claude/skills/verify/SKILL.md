@@ -1,16 +1,19 @@
 ---
 name: verify
-description: Chạy kiểm chứng Đảo Đèn Lồng và lưu bằng chứng — dùng sau khi đổi luật game, trước khi gắn tag phase-N, hoặc khi cần chứng minh một yêu cầu.
+description: Chạy kiểm chứng Đảo Đèn Lồng (contract v1.1, 3 Đêm) và lưu bằng chứng — dùng sau khi đổi luật game, trước khi gắn tag phase-N, hoặc khi cần chứng minh một yêu cầu.
 ---
 
 # Kiểm chứng + bằng chứng
 
-1. `npm test` — toàn bộ case trong `tests/cases.js` (chạy CLI headless thật). Phải xanh.
-2. Yêu cầu mới chưa có case? Thêm vào `tests/cases.js`: `{ id, req: '<trích yêu cầu>', run() { … assert …; return '<quan sát thực tế>' } }`.
-   Dùng `runHeadless({ scenario, inputs, ticks, every })` với scenario `quiet` (không ngẫu nhiên) để kết quả tính tay được.
-   Giá trị kỳ vọng lấy từ `TUNING` (game.contract.json) hoặc tính tay — KHÔNG copy từ output của game.
+1. `npm test` — toàn bộ case trong `tests/cases.js` (Phase 1 regression) và `tests/cases2.js` (Phase 2), chạy CLI headless thật. Phải xanh.
+2. Yêu cầu mới chưa có case? Thêm vào `tests/cases2.js`: `{ id, req: '<trích yêu cầu>', run() { … assert …; return '<quan sát thực tế>' } }`.
+   Dùng `runHeadless({ night, scenario, inputs, ticks, every })` với scenario `Q` (không ngẫu nhiên: không đom đóm/bóng/Gió Lạc tự sinh, không gió, không bùa mặc định) để kết quả tính tay được.
+   Giá trị kỳ vọng lấy từ ticket, `TUNING` (game.contract.json) hoặc tính tay — KHÔNG copy từ output của game. Ghi phép tính vào comment (ví dụ `y_k = (14k − k(k+1)/6)/60 → chạm đất ở k = 83`).
+   Nhớ mô hình tick: sự kiện của bước k ghi `tick = k+1`; bộ đếm N tick đặt ở bước k hết sau N bước.
 3. `npm run proof -- <phase>` → ghi `docs/proof/phase-<N>/results.md` + 2 lần chạy seed 42 để chứng minh tất định.
-4. Thứ chỉ nhìn mới thấy (HUD, đèn sáng, Bóng Mực): chạy `PORT=5199 npm start` rồi chụp bằng Chrome headless:
-   `chrome --headless=new --use-angle=swiftshader --enable-unsafe-swiftshader --window-size=1280,720 --virtual-time-budget=4000 --screenshot=docs/proof/phase-<N>/img/<ten>.png "http://localhost:5199/?autostart&seed=3&scenario=/tests/scenarios/<file>.json"`
-   Mở ảnh xem thật, ghi ảnh chứng minh yêu cầu nào trong `docs/proof/phase-<N>/README.md`.
-5. Ghi trung thực: yêu cầu chưa đạt → "chưa đạt" + lý do.
+4. Thứ chỉ nhìn mới thấy (HUD, menu, bản đồ, màu): chạy `PORT=5199 npm start`, rồi `CHROME=<đường dẫn chrome> node scripts/screens.js docs/proof/phase-<N>/img [tên ảnh]`.
+   Scenario cho ảnh ở `tests/scenarios/screenshot-*.json`. URL nhận `?autostart&night=N&seed=S&scenario=…&yaw=độ&fps`.
+   **Mở từng ảnh ra xem thật**, ghi ảnh chứng minh yêu cầu nào trong `docs/proof/phase-<N>/README.md`.
+5. FPS: `CHROME=… node scripts/fps-bench.js 15 docs/proof/phase-<N>/fps.json` (GPU thật, ép viewport 1280×720). Không đo FPS bằng `--use-angle=swiftshader`.
+6. E2E: `node scripts/bot.js <seed> b.json <night>` rồi phát lại `node src/headless.js --seed <seed> --night <night> --inputs b.json --ticks 21600 --out o.jsonl` — dòng `end` phải khớp kết quả bot.
+7. Ghi trung thực: yêu cầu chưa đạt → "chưa đạt" + lý do.
