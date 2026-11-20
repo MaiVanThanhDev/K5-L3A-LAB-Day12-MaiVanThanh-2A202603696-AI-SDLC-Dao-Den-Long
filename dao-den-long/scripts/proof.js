@@ -5,9 +5,12 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 import os from 'node:os';
-import { cases, ROOT, runHeadless } from '../tests/cases.js';
+import { cases as cases1, ROOT, runHeadless } from '../tests/cases.js';
+import { cases2 } from '../tests/cases2.js';
 
-const phase = process.argv[2] || '1';
+const phase = process.argv[2] || '2';
+// Phase N proof = every case so far (Phase 1 regression + new rules).
+const cases = Number(phase) >= 2 ? [...cases1, ...cases2] : cases1;
 const dir = join(ROOT, 'docs', 'proof', `phase-${phase}`);
 mkdirSync(join(dir, 'out'), { recursive: true });
 
