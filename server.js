@@ -2,16 +2,20 @@
 // Also hosts the local leaderboard (stored on disk) and its export command:
 //   npm start -- --export-leaderboard out.json     (or: node server.js --export-leaderboard out.json)
 // Leaderboard file: $LEADERBOARD_FILE, default <repo>/data/leaderboard.json
+// Accessory shop (xu earned after every Night): PostgreSQL when $DATABASE_URL is set (docker compose up), otherwise
+// a JSON file $SHOP_FILE (default <repo>/data/shop.json).
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { writeFileSync } from 'node:fs';
 import { join, normalize, extname, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validate, insert, load, save } from './src/leaderboard.js';
+import { openStore, ShopError } from './src/shop-store.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 5173;
 const LB_FILE = resolve(process.env.LEADERBOARD_FILE || join(ROOT, 'data', 'leaderboard.json'));
+const SHOP_FILE = resolve(process.env.SHOP_FILE || join(ROOT, 'data', 'shop.json'));
 const ALLOWED = ['web/', 'src/', 'node_modules/three/build/', 'tests/scenarios/', 'game.contract.json'];
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
@@ -26,9 +30,39 @@ if (exp >= 0) {
 }
 
 const json = (res, code, body) => res.writeHead(code, { 'content-type': TYPES['.json'], 'cache-control': 'no-store' }).end(JSON.stringify(body));
+async function readBody(req, limit = 4096) {
+  let body = '';
+  for await (const chunk of req) { body += chunk; if (body.length > limit) throw new ShopError('too large', 413); }
+  try { return JSON.parse(body); } catch { throw new ShopError('invalid JSON'); }
+}
+
+let shop;
+try { shop = await openStore({ databaseUrl: process.env.DATABASE_URL, file: SHOP_FILE }); } catch (e) { process.stderr.write(`shop: ${e.message}
+`); process.exit(1); }
+console.log(`Cửa hàng: lưu ở ${shop.kind === 'postgres' ? 'PostgreSQL' : SHOP_FILE}`);
+// GET /api/shop/profile?name=  ·  POST /api/shop/earn {name, run_id, score}  ·  POST /api/shop/buy|equip {name, item}
+async function shopRoute(req, res, url) {
+  try {
+    const op = url.pathname.slice('/api/shop/'.length);
+    let profile;
+    if (op === 'profile' && req.method === 'GET') profile = await shop.get(url.searchParams.get('name'));
+    else if (['earn', 'buy', 'equip'].includes(op) && req.method === 'POST') {
+      const b = await readBody(req);
+      if (!b || typeof b !== 'object') throw new ShopError('body must be a JSON object');
+      profile = op === 'earn' ? await shop.earn(b.name, b.run_id, b.score) : await shop[op](b.name, b.item);
+    } else return json(res, op === 'profile' || ['earn', 'buy', 'equip'].includes(op) ? 405 : 404, { error: 'not found' });
+    return json(res, 200, { ...profile, storage: shop.kind });
+  } catch (e) {
+    if (e instanceof ShopError) return json(res, e.status, { error: e.message });
+    process.stderr.write(`shop: ${e.stack || e}
+`);
+    return json(res, 500, { error: 'lỗi máy chủ' });
+  }
+}
 
 createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
+  if (url.pathname.startsWith('/api/shop/')) return shopRoute(req, res, url);
   if (url.pathname === '/api/leaderboard') {
     if (req.method === 'GET') return json(res, 200, { entries: load(LB_FILE) });
     if (req.method === 'POST') {

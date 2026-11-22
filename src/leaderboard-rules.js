@@ -7,12 +7,17 @@ export function normalizeName(name) {
   return typeof name === 'string' ? name.normalize('NFC').trim() : '';
 }
 
+// true if an already-normalized name is 3–12 characters (combining marks not counted) of letters, digits or _
+export function checkName(name) {
+  const len = [...name.replace(/\p{M}/gu, '')].length;
+  return len >= 3 && len <= 12 && NAME_RE.test(name);
+}
+
 // Returns { entry } or { error }.
 export function validate(input, now = new Date()) {
   if (!input || typeof input !== 'object') return { error: 'body must be a JSON object' };
   const name = normalizeName(input.name);
-  const len = [...name.replace(/\p{M}/gu, '')].length;
-  if (len < 3 || len > 12 || !NAME_RE.test(name)) return { error: 'name must be 3–12 characters: letters, digits or _' };
+  if (!checkName(name)) return { error: 'name must be 3–12 characters: letters, digits or _' };
   const { score, nights_won: nightsWon, seed } = input;
   if (!Number.isInteger(score) || score < 0) return { error: 'score must be a non-negative integer' };
   if (!Number.isInteger(nightsWon) || nightsWon < 0 || nightsWon > 3) return { error: 'nights_won must be an integer 0–3' };

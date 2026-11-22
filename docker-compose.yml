@@ -1,0 +1,39 @@
+# Đảo Đèn Lồng + PostgreSQL for the accessory shop (xu, owned items, outfit).
+#   docker compose up --build        → http://localhost:5173   (shop data in the `ddl-pg` volume)
+#   docker compose up -d db          → database only, for `DATABASE_URL=postgres://ddl:ddl@localhost:5433/ddl npm start`
+# Local development credentials only; override with POSTGRES_PASSWORD / a .env file (never committed) for anything else.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ddl
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ddl}
+      POSTGRES_DB: ddl
+    ports:
+      - "127.0.0.1:${PG_PORT:-5433}:5432"   # host port 5433 so a local PostgreSQL on 5432 is not in the way
+    volumes:
+      - ddl-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ddl -d ddl"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  game:
+    build: .
+    environment:
+      PORT: "5173"
+      DATABASE_URL: postgres://ddl:${POSTGRES_PASSWORD:-ddl}@db:5432/ddl
+    ports:
+      - "5173:5173"
+    volumes:
+      - ddl-data:/app/data   # leaderboard file
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  ddl-pg:
+  ddl-data:
