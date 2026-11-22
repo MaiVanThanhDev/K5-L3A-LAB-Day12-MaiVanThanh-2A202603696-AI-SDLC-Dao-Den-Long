@@ -5,6 +5,7 @@
 // Accessory shop (xu earned after every Night): PostgreSQL when $DATABASE_URL is set (docker compose up), otherwise
 // a JSON file $SHOP_FILE (default <repo>/data/shop.json).
 import { createServer } from 'node:http';
+import { networkInterfaces } from 'node:os';
 import { readFile } from 'node:fs/promises';
 import { writeFileSync } from 'node:fs';
 import { join, normalize, extname, dirname, resolve } from 'node:path';
@@ -17,7 +18,10 @@ const PORT = Number(process.env.PORT) || 5173;
 const LB_FILE = resolve(process.env.LEADERBOARD_FILE || join(ROOT, 'data', 'leaderboard.json'));
 const SHOP_FILE = resolve(process.env.SHOP_FILE || join(ROOT, 'data', 'shop.json'));
 const ALLOWED = ['web/', 'src/', 'node_modules/three/build/', 'tests/scenarios/', 'game.contract.json'];
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml' };
+// Installable app (PWA): the service worker must be served from the root so its scope covers the whole game.
+const ALIASES = { 'sw.js': 'web/sw.js', 'manifest.webmanifest': 'web/manifest.webmanifest' };
 
 const argv = process.argv.slice(2);
 const exp = argv.indexOf('--export-leaderboard');
@@ -80,10 +84,16 @@ createServer(async (req, res) => {
   }
   let p = decodeURIComponent(url.pathname).replace(/^\/+/, '');
   if (p === '') p = 'web/index.html';
+  if (ALIASES[p]) p = ALIASES[p];
   const rel = normalize(p).replace(/\\/g, '/');
   if (rel.startsWith('..') || !ALLOWED.some((a) => rel === a || rel.startsWith(a))) { res.writeHead(404).end('not found'); return; }
   try {
     const body = await readFile(join(ROOT, rel));
     res.writeHead(200, { 'content-type': TYPES[extname(rel)] || 'application/octet-stream', 'cache-control': 'no-store' }).end(body);
   } catch { res.writeHead(404).end('not found'); }
-}).listen(PORT, () => console.log(`Đảo Đèn Lồng đang chạy: http://localhost:${PORT}  (Ctrl+C để dừng)`));
+}).listen(PORT, () => {
+  console.log(`Đảo Đèn Lồng đang chạy: http://localhost:${PORT}  (Ctrl+C để dừng)`);
+  // phones on the same Wi-Fi can play in the browser (touch controls turn on by themselves)
+  const lan = Object.values(networkInterfaces()).flat().filter((a) => a && a.family === 'IPv4' && !a.internal).map((a) => `http://${a.address}:${PORT}`);
+  if (lan.length) console.log(`Điện thoại cùng mạng Wi-Fi: ${lan.join('  ')}`);
+});
