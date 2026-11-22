@@ -32,6 +32,11 @@ const SHOTS = [
   { name: 'pause', url: '/?autostart&seed=3&night=2', steps: [[key('Escape'), 800]], wait: 300 },
   { name: 'settings', url: '/?autostart&seed=3&night=2', steps: [[key('KeyP'), 500], [click('btn-pause-settings'), 500]], wait: 300 },
   { name: 'result-lost', url: '/?autostart&seed=3&night=1&scenario=/tests/scenarios/screenshot-lose.json', wait: 3500 },
+  // feature/shop-scenery: villages (houses, palms, gate, well, paths, sky lanterns)
+  { name: 'village-n1', url: '/?autostart&seed=3&night=1&scenario=/tests/scenarios/screenshot-3lit.json&cam=-6,22,-46,2,0,-8', wait: 3000 },
+  { name: 'village-n1-close', url: '/?autostart&seed=3&night=1&scenario=/tests/scenarios/screenshot-3lit.json&cam=4,5,-6,9,2,10', wait: 3000 },
+  { name: 'village-n2', url: '/?autostart&seed=3&night=2&cam=35,28,-40,35,0,0', wait: 3000 },
+  { name: 'village-n3', url: '/?autostart&seed=3&night=3&cam=0,26,-58,0,2,-10', wait: 3000 },
   { name: 'dawn', url: '/?autostart&seed=3&night=3&scenario=/tests/scenarios/screenshot-win3.json', steps: [[key('KeyE', 200), 2500]], wait: 300 },
 ];
 

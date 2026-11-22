@@ -205,3 +205,206 @@ export function ambientFireflies(scene, areas, count = 140) {
 
 // Soft round contact shadow texture (used under characters and lanterns instead of real shadow maps).
 export const shadowTexture = () => radialTexture('rgba(0,0,0,0.55)', 'rgba(0,0,0,0)', 64);
+
+// ======== Village props (rendering only): houses, stilt houses, areca palms, round trees, haystacks, well, jars,
+// flower bushes, village gate, stone lanterns, stepping-stone paths and drifting sky lanterns. ========
+// Every prop type is a list of parts (geometry + material) in local space, front facing +Z. village() instances each part
+// over all placements of its type → draw calls depend on the number of part types, not on the number of props.
+const _tm = new THREE.Matrix4(), _tq = new THREE.Quaternion(), _te = new THREE.Euler(), _tv = new THREE.Vector3(), _ts = new THREE.Vector3();
+const tf = (geo, p = [0, 0, 0], r = [0, 0, 0], s = [1, 1, 1]) => {
+  _te.set(r[0], r[1], r[2]); _tq.setFromEuler(_te);
+  return geo.applyMatrix4(_tm.compose(_tv.set(p[0], p[1], p[2]), _tq, _ts.set(s[0], s[1], s[2])));
+};
+// merge already-transformed geometries (position + normal) into one non-indexed geometry
+function merge(list) {
+  const geos = list.map((g) => (g.index ? g.toNonIndexed() : g));
+  let n = 0; for (const g of geos) n += g.attributes.position.count;
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
+  let o = 0;
+  for (const g of geos) { pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3); o += g.attributes.position.count; }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3)); out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  return out;
+}
+const lamb = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, ...extra });
+const basic = (color, extra = {}) => new THREE.MeshBasicMaterial({ color, ...extra });
+// hip roof: square pyramid (4-sided cone turned 45°) stretched to w × d, base at y0
+const hipRoof = (w, d, h, y0) => tf(new THREE.ConeGeometry(Math.SQRT1_2, 1, 4, 1).rotateY(Math.PI / 4), [0, y0 + h / 2, 0], [0, 0, 0], [w, h, d]); // turn first, then stretch
+
+let PROPS = null;
+function propDefs(C) {
+  if (PROPS) return PROPS;
+  const M = {
+    clay: lamb(0xc9a77a), wood: lamb(C.wood), darkWood: lamb(0x3b2a1c), stone: lamb(C.stone, { flatShading: true }),
+    thatch: lamb(0xa2833f, { flatShading: true }), tile: lamb(0x8a3a2c, { flatShading: true }), window: basic(0xffc469),
+    palmTrunk: lamb(0x8b7355, { flatShading: true }), palmLeaf: lamb(0x3f7a4a, { flatShading: true, side: THREE.DoubleSide }), nut: lamb(0xc9a23a),
+    leaf: lamb(0xffffff, { flatShading: true }), hay: lamb(0xd9b45a, { flatShading: true }), water: basic(0x0f2a3a), jar: lamb(0x7a4a2a, { flatShading: true }),
+    bush: lamb(0x2f6a4c, { flatShading: true }), flower: basic(0xff8fb1), red: basic(0xe0402a), lampGlow: basic(0xffd27a),
+  };
+  const cyl = (rt, rb, h, seg = 8) => new THREE.CylinderGeometry(rt, rb, h, seg);
+  const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  // ---- nhà tranh: clay walls, 4 dark posts, thatched hip roof, door, two lit windows at the front + one each side ----
+  const house = {
+    r: 1.85, h: 6,
+    parts: [
+      [tf(box(3.4, 0.3, 2.8), [0, 0.15, 0]), M.stone],
+      [tf(box(3.0, 1.9, 2.4), [0, 1.25, 0]), M.clay],
+      [merge([[-1.5, -1.2], [1.5, -1.2], [-1.5, 1.2], [1.5, 1.2]].map(([x, z]) => tf(cyl(0.1, 0.12, 2.0, 6), [x, 1.2, z]))), M.darkWood],
+      [hipRoof(4.0, 3.4, 1.8, 2.15), M.thatch],
+      [tf(box(0.8, 1.4, 0.06), [0, 1.0, 1.21]), M.darkWood],
+      [merge([tf(box(0.55, 0.45, 0.06), [-0.95, 1.45, 1.21]), tf(box(0.55, 0.45, 0.06), [0.95, 1.45, 1.21]),
+        tf(box(0.06, 0.45, 0.55), [1.51, 1.45, 0]), tf(box(0.06, 0.45, 0.55), [-1.51, 1.45, 0])]), M.window],
+    ],
+    glow: [[-0.95, 1.45, 1.35], [0.95, 1.45, 1.35], [1.65, 1.45, 0], [-1.65, 1.45, 0]],
+  };
+  // ---- nhà sàn: house on 6 stilts with a ladder, tiled roof ----
+  const stilts = [];
+  for (const x of [-1.4, 0, 1.4]) for (const z of [-1.0, 1.0]) stilts.push(tf(cyl(0.11, 0.13, 1.3, 6), [x, 0.65, z]));
+  const ladder = [tf(box(0.06, 1.6, 0.06), [-0.3, 0.7, 1.75], [-0.45, 0, 0]), tf(box(0.06, 1.6, 0.06), [0.3, 0.7, 1.75], [-0.45, 0, 0])];
+  for (let i = 0; i < 4; i++) ladder.push(tf(box(0.6, 0.05, 0.05), [0, 0.25 + i * 0.35, 1.95 - i * 0.16]));
+  const stilt = {
+    r: 1.85, h: 6,
+    parts: [
+      [merge([...stilts, ...ladder]), M.darkWood],
+      [tf(box(3.4, 0.2, 2.6), [0, 1.4, 0.1]), M.wood],
+      [tf(box(3.0, 1.6, 2.2), [0, 2.3, 0]), M.clay],
+      [hipRoof(4.0, 3.2, 1.6, 3.1), M.tile],
+      [tf(box(0.7, 1.2, 0.06), [0, 2.1, 1.11]), M.darkWood],
+      [merge([tf(box(0.5, 0.4, 0.06), [-0.95, 2.45, 1.11]), tf(box(0.5, 0.4, 0.06), [0.95, 2.45, 1.11])]), M.window],
+    ],
+    glow: [[-0.95, 2.45, 1.25], [0.95, 2.45, 1.25]],
+  };
+  // ---- cây cau: tall slightly curved trunk, drooping fronds, a nut cluster ----
+  const trunk = [];
+  for (let i = 0; i < 6; i++) trunk.push(tf(cyl(0.13 - i * 0.01, 0.15 - i * 0.01, 1.0, 6), [Math.pow(i / 6, 2) * 0.7, 0.5 + i * 0.95, 0], [0, 0, -0.12 * (i / 6)]));
+  const fronds = [];
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const f = tf(new THREE.ConeGeometry(0.28, 2.6, 3, 1), [0, 1.3, 0], [0, 0, 0], [1, 1, 0.25]); // leaf along +Y from the base, flat
+    f.rotateZ(-1.9); f.rotateY(a); f.translate(0.7, 5.9, 0);
+    fronds.push(f);
+  }
+  const palm = {
+    r: 0.35, h: 6,
+    parts: [
+      [merge(trunk), M.palmTrunk],
+      [merge(fronds), M.palmLeaf],
+      [merge([[0.15, 0.1], [-0.12, 0.12], [0, -0.16]].map(([x, z]) => tf(new THREE.SphereGeometry(0.13, 6, 4), [0.7 + x, 5.6, z]))), M.nut],
+    ],
+  };
+  // ---- cây bàng: trunk + four foliage blobs (colour varied per instance) ----
+  const roundTree = {
+    r: 0.6, h: 5, vary: [0x2c5a46, 0x35664c, 0x3d6e3f, 0x2a5550],
+    parts: [
+      [merge([tf(cyl(0.22, 0.32, 2.4, 7), [0, 1.2, 0]), tf(cyl(0.08, 0.12, 1.2, 5), [0.5, 2.3, 0], [0, 0, -0.8])]), M.wood],
+      [merge([tf(new THREE.IcosahedronGeometry(1.5, 0), [0, 3.4, 0]), tf(new THREE.IcosahedronGeometry(1.1, 0), [1.1, 3.0, 0.3]), tf(new THREE.IcosahedronGeometry(1.0, 0), [-0.9, 3.1, -0.4]),
+        tf(new THREE.IcosahedronGeometry(0.9, 0), [0.2, 4.4, 0.2])]), M.leaf, 'vary'],
+    ],
+  };
+  const haystack = {
+    r: 0.95, h: 1.8,
+    parts: [[merge([tf(new THREE.SphereGeometry(1, 9, 6, 0, Math.PI * 2, 0, Math.PI / 2), [0, 0, 0], [0, 0, 0], [1, 1.25, 1]), tf(cyl(0.04, 0.04, 0.8, 4), [0, 1.5, 0])]), M.hay]],
+  };
+  const well = {
+    r: 1.0, h: 2.6,
+    parts: [
+      [tf(cyl(0.85, 0.9, 0.8, 14), [0, 0.4, 0]), M.stone],
+      [tf(new THREE.CircleGeometry(0.7, 14), [0, 0.81, 0], [-Math.PI / 2, 0, 0]), M.water],
+      [merge([tf(cyl(0.06, 0.06, 1.9, 5), [-0.75, 1.15, 0]), tf(cyl(0.06, 0.06, 1.9, 5), [0.75, 1.15, 0]), tf(cyl(0.05, 0.05, 1.6, 5), [0, 1.75, 0], [0, 0, Math.PI / 2])]), M.darkWood],
+      [hipRoof(2.0, 1.4, 0.6, 2.05), M.tile],
+    ],
+  };
+  const jarProf = [[0, 0], [0.22, 0.02], [0.34, 0.25], [0.3, 0.5], [0.18, 0.6], [0.2, 0.66], [0, 0.66]].map(([r, y]) => new THREE.Vector2(r, y));
+  const jars = {
+    r: 0.75, h: 0.8,
+    parts: [[merge([[0, 0, 1], [0.6, 0.2, 0.8], [0.15, -0.55, 0.9]].map(([x, z, s]) => tf(new THREE.LatheGeometry(jarProf, 9), [x, 0, z], [0, 0, 0], [s, s, s]))), M.jar]],
+  };
+  const flowers = [];
+  for (let i = 0; i < 7; i++) { const a = i * 2.4; flowers.push(tf(new THREE.SphereGeometry(0.07, 5, 3), [Math.cos(a) * 0.42, 0.45 + (i % 3) * 0.12, Math.sin(a) * 0.42])); }
+  const bush = { parts: [[tf(new THREE.IcosahedronGeometry(0.55, 0), [0, 0.35, 0], [0, 0, 0], [1, 0.75, 1]), M.bush], [merge(flowers), M.flower]] };
+  // ---- cổng làng: two pillars, beam, small tiled roof, two red lanterns; walkable between the pillars ----
+  const gate = {
+    colliders: [[-2.2, 0, 0.5, 6], [2.2, 0, 0.5, 6]],
+    parts: [
+      [merge([tf(box(0.7, 3.4, 0.7), [-2.2, 1.7, 0]), tf(box(0.7, 3.4, 0.7), [2.2, 1.7, 0]), tf(box(0.9, 0.3, 0.9), [-2.2, 0.15, 0]), tf(box(0.9, 0.3, 0.9), [2.2, 0.15, 0])]), M.clay],
+      [tf(box(5.6, 0.35, 0.9), [0, 3.5, 0]), M.darkWood],
+      [hipRoof(6.4, 1.6, 0.8, 3.65), M.tile],
+      [merge([tf(new THREE.SphereGeometry(0.22, 8, 6), [-1.2, 3.0, 0.3], [0, 0, 0], [1, 1.3, 1]), tf(new THREE.SphereGeometry(0.22, 8, 6), [1.2, 3.0, 0.3], [0, 0, 0], [1, 1.3, 1])]), M.red],
+    ],
+    glow: [[-1.2, 3.0, 0.3], [1.2, 3.0, 0.3]],
+  };
+  const stoneLantern = {
+    r: 0.35, h: 1.4,
+    parts: [
+      [merge([tf(box(0.5, 0.2, 0.5), [0, 0.1, 0]), tf(cyl(0.1, 0.12, 0.7, 6), [0, 0.55, 0]), tf(new THREE.ConeGeometry(0.42, 0.3, 4), [0, 1.35, 0], [0, Math.PI / 4, 0])]), M.stone],
+      [tf(box(0.3, 0.3, 0.3), [0, 1.05, 0]), M.lampGlow],
+    ],
+    glow: [[0, 1.05, 0]],
+  };
+  const stepStone = { parts: [[tf(cyl(0.38, 0.42, 0.08, 7), [0, 0.03, 0]), M.stone]] };
+  PROPS = { house, stilt, palm, roundTree, haystack, well, jars, bush, gate, stoneLantern, stepStone };
+  return PROPS;
+}
+// footprint radius used when placing props (keeps them clear of lanterns, spawn points and each other)
+export const PROP_RADIUS = { house: 2.4, stilt: 2.4, palm: 0.8, roundTree: 1.6, haystack: 1.2, well: 1.3, jars: 1.0, bush: 0.7, gate: 3.0, stoneLantern: 0.6, stepStone: 0.5 };
+
+// items: [{ type, x, y, z, rot, s }] → { group, colliders: [{x, z, r, h}], update(t) }
+export function village(C, items, glowTex) {
+  const defs = propDefs(C), group = new THREE.Group(), colliders = [], glowPts = [];
+  const byType = new Map();
+  for (const it of items) { if (!byType.has(it.type)) byType.set(it.type, []); byType.get(it.type).push(it); }
+  const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
+  for (const [type, list] of byType) {
+    const def = defs[type];
+    for (const [geo, mat, flag] of def.parts) {
+      const m = new THREE.InstancedMesh(geo, mat, list.length);
+      list.forEach((it, i) => {
+        Q.setFromAxisAngle(up, it.rot || 0); M4.compose(V.set(it.x, it.y || 0, it.z), Q, S.setScalar(it.s || 1)); m.setMatrixAt(i, M4);
+        if (flag === 'vary') m.setColorAt(i, col.setHex(def.vary[Math.floor(hash(it.x, it.z) * def.vary.length)]));
+      });
+      group.add(m);
+    }
+    for (const it of list) {
+      const s = it.s || 1, c = Math.cos(it.rot || 0), sn = Math.sin(it.rot || 0);
+      // local (x, z) → world: rotation about +Y by rot (three.js: x' = x cos + z sin, z' = −x sin + z cos)
+      const w = (x, z) => [it.x + (x * c + z * sn) * s, it.z + (-x * sn + z * c) * s];
+      if (def.colliders) for (const [x, z, r, h] of def.colliders) { const [wx, wz] = w(x, z); colliders.push({ x: wx, z: wz, r: r * s, h: (it.y || 0) + h * s }); }
+      else if (def.r) colliders.push({ x: it.x, z: it.z, r: def.r * s, h: (it.y || 0) + def.h * s });
+      if (def.glow) for (const [x, y, z] of def.glow) { const [wx, wz] = w(x, z); glowPts.push(wx, (it.y || 0) + y * s, wz); }
+    }
+  }
+  let glowMat = null;
+  if (glowPts.length && glowTex) {
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(glowPts, 3));
+    glowMat = new THREE.PointsMaterial({ map: glowTex, color: 0xffb347, size: 2.2, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending });
+    group.add(new THREE.Points(g, glowMat));
+  }
+  return { group, colliders, update(t) { if (glowMat) glowMat.opacity = 0.7 + 0.12 * Math.sin(t * 3.1) + 0.06 * Math.sin(t * 7.3); } };
+}
+
+// Sky lanterns (đèn trời) rising slowly around the island and looping: one instanced mesh + one Points draw for the glow.
+export function skyLanterns(areas, glowTex, count = 36) {
+  const group = new THREE.Group();
+  const mesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.32, 0.24, 0.6, 6, 1), new THREE.MeshBasicMaterial({ color: 0xffb35c, fog: false }), count);
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); mesh.frustumCulled = false; group.add(mesh);
+  const gpos = new Float32Array(count * 3), gg = new THREE.BufferGeometry();
+  gg.setAttribute('position', new THREE.BufferAttribute(gpos, 3).setUsage(THREE.DynamicDrawUsage));
+  const pts = new THREE.Points(gg, new THREE.PointsMaterial({ map: glowTex, color: 0xffa040, size: 3.2, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+  pts.frustumCulled = false; group.add(pts);
+  const L = Array.from({ length: count }, (_, i) => {
+    const [cx, cz, R] = areas[i % areas.length], a = hash(i, 51) * Math.PI * 2, r = R * (0.5 + hash(i, 52) * 1.1);
+    return { x: cx + r * Math.cos(a), z: cz + r * Math.sin(a), y0: hash(i, 53) * 40, v: 0.5 + hash(i, 54) * 0.5, ph: hash(i, 55) * 6.28 };
+  });
+  const M4 = new THREE.Matrix4(), V = new THREE.Vector3(), Q = new THREE.Quaternion(), S = new THREE.Vector3(1, 1, 1);
+  return {
+    group,
+    update(t) {
+      L.forEach((l, i) => {
+        V.set(l.x + Math.sin(t * 0.3 + l.ph) * 1.5, 6 + ((l.y0 + t * l.v) % 40), l.z + Math.cos(t * 0.25 + l.ph) * 1.5);
+        M4.compose(V, Q, S); mesh.setMatrixAt(i, M4);
+        gpos[i * 3] = V.x; gpos[i * 3 + 1] = V.y; gpos[i * 3 + 2] = V.z;
+      });
+      mesh.instanceMatrix.needsUpdate = true; gg.attributes.position.needsUpdate = true;
+    },
+  };
+}

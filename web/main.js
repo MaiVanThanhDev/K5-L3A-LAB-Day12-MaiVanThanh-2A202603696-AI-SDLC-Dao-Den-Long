@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { Game, DT, NIGHTS } from '/src/sim/game.js';
 import { sfx, unlock, setVolume, startMusic, stopMusic } from '/web/audio.js';
 import { benchScenario, benchCamera } from '/src/sim/bench.js';
-import { createSky, createCloudSea, islandMesh, decorations, grass, ambientFireflies, radialTexture, shadowTexture } from '/web/scenery.js';
+import { createSky, createCloudSea, islandMesh, decorations, grass, ambientFireflies, radialTexture, shadowTexture, village, skyLanterns, PROP_RADIUS } from '/web/scenery.js';
 import { createMay } from '/web/may.js';
 import { validate as validateEntry, insert as insertEntry } from '/src/leaderboard-rules.js';
 
@@ -13,6 +13,7 @@ const T = contract.tuning;
 const params = new URLSearchParams(location.search);
 // Benchmark scene (Ticket-04 §1): ?bench&seed=42&duration=30&warmup=3 — standard scene, no creative extras, scripted camera.
 const BENCH = params.has('bench');
+const CAM = params.get('cam') ? params.get('cam').split(',').map(Number) : null;
 const benchCfg = { seed: Number(params.get('seed') ?? 42), duration: Number(params.get('duration') ?? 30), warmup: Number(params.get('warmup') ?? 3) };
 
 // ---------- standard palette (Ticket-02) ----------
@@ -78,18 +79,70 @@ const M = { grass: mat(C.grass), sand: mat(C.sand), wood: mat(C.wood), stone: ma
 let world = null; // THREE.Group of static geometry for the current night
 const island = (r, cx = 0, cz = 0) => { const g = islandMesh(r, C); g.position.set(cx, 0, cz); return g; };
 // Decorations are creative scenery: off in the bench scene; their colliders become client-only sim obstacles.
-function decorate(g, spots, avoid, areas) {
+// `plan` = hand-placed village props [{type, x, z, rot}]; each is kept only if its whole footprint is open flat ground (height 0),
+// clear of lanterns, spawn points, motes, the start and the props already placed.
+function decorate(g, spots, avoid, areas, plan = []) {
   if (BENCH) return;
   const map = NIGHTS[night];
-  const clear = (x, z) => avoid(x, z) || map.motePoints.some((q) => Math.hypot(x - q[0], z - q[2]) < 2.2)
+  const blocked = (x, z) => avoid(x, z) || map.motePoints.some((q) => Math.hypot(x - q[0], z - q[2]) < 2.2)
     || map.shadePoints.some((q) => Math.hypot(x - q[0], z - q[2]) < 2.2) || Math.hypot(x - map.start[0], z - map.start[2]) < 4;
-  const d = decorations(C, spots, clear);
+  const items = [];
+  const overlaps = (x, z, r) => items.some((o) => Math.hypot(x - o.x, z - o.z) < r + PROP_RADIUS[o.type]);
+  for (const it of plan) {
+    const r = PROP_RADIUS[it.type];
+    const samples = [[0, 0], ...Array.from({ length: 8 }, (_, k) => [r * Math.cos(k * Math.PI / 4), r * Math.sin(k * Math.PI / 4)])];
+    if (samples.some(([dx, dz]) => map.groundAt(it.x + dx, it.z + dz) !== 0 || blocked(it.x + dx, it.z + dz)) || overlaps(it.x, it.z, r)) continue;
+    items.push(it);
+  }
+  // stepping-stone paths from the start toward every lantern (flat ground only, stop short of the lantern)
+  for (const L of map.lanterns) {
+    const dx = L[0] - map.start[0], dz = L[2] - map.start[2], len = Math.hypot(dx, dz);
+    for (let s = 3; s < len - 4.5; s += 1.5) {
+      const j = (Math.sin(s * 3.7 + L[0]) * 0.35), x = map.start[0] + (dx * s) / len - (dz / len) * j, z = map.start[2] + (dz * s) / len + (dx / len) * j;
+      const h = map.groundAt(x, z);
+      if (h === null || h === Infinity || h !== Math.round(h) || overlaps(x, z, 0.4)) continue;
+      items.push({ type: 'stepStone', x, y: h, z, rot: s });
+    }
+  }
+  const v = village(C, items, glowTex);
+  g.add(v.group); g.userData.colliders.push(...v.colliders); g.userData.anim.push(v.update);
+  const sky = skyLanterns(areas, glowTex);
+  g.add(sky.group); g.userData.anim.push(sky.update);
+  const nearProp = (x, z, pad) => items.some((o) => o.type !== 'stepStone' && Math.hypot(x - o.x, z - o.z) < PROP_RADIUS[o.type] + pad);
+  const d = decorations(C, spots, (x, z) => blocked(x, z) || nearProp(x, z, 1.2));
   g.add(d.group);
   g.userData.colliders.push(...d.colliders);
-  g.add(grass(C, areas, (x, z) => clear(x, z) || d.colliders.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + 0.3)));
+  g.add(grass(C, areas, (x, z) => blocked(x, z) || nearProp(x, z, 0.2) || d.colliders.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + 0.3)));
   if (fireflies) scene.remove(fireflies.obj);
   fireflies = ambientFireflies(scene, areas);
+  g.userData.props = items.length;
 }
+// Village plans. P(type, r, deg, cx, cz) = prop at polar (r, deg) around (cx, cz), front turned toward that centre;
+// around(house, …) adds yard props in the house's own frame (x right, z toward its front).
+const P = (type, r, deg, cx = 0, cz = 0) => {
+  const a = (deg * Math.PI) / 180, x = cx + r * Math.cos(a), z = cz + r * Math.sin(a);
+  return { type, x, z, rot: Math.atan2(cx - x, cz - z) };
+};
+const around = (h, list) => list.map(([type, lx, lz]) => {
+  const c = Math.cos(h.rot), s = Math.sin(h.rot);
+  return { type, x: h.x + lx * c + lz * s, z: h.z - lx * s + lz * c, rot: h.rot + lx };
+});
+const yard = (h) => [h, ...around(h, [['jars', 2.9, 0.6], ['haystack', -3.2, -0.4], ['bush', 1.6, 2.6], ['bush', -1.7, 2.5], ['stoneLantern', 2.6, 2.4]])];
+const VILLAGE = {
+  1: () => [
+    ...yard(P('house', 19, 54)), ...yard(P('house', 19, 126)), ...yard(P('house', 19, -162)), ...yard(P('house', 19, -18)), ...yard(P('house', 18, -90)),
+    P('gate', 26, -90), P('well', 8, -40), P('well', 8, 140),
+    ...[0, 72, 144, 216, 288].map((a) => P('roundTree', 30, a + 36)), ...[20, 100, 170, 250, 320].map((a) => P('palm', 35, a)),
+  ],
+  2: () => [0, 70].flatMap((cx) => [
+    ...yard(P('stilt', 13, 150, cx)), ...yard(P('stilt', 13, -90, cx)), ...yard(P('house', 12, 30, cx)),
+    ...Array.from({ length: 14 }, (_, i) => P('palm', 22 + (i % 3), i * 25.7 + 7, cx)), P('roundTree', 6, 200, cx), P('well', 6, 60, cx),
+  ]).concat([P('stoneLantern', 24.7, 14.5, 0), P('stoneLantern', 24.7, -14.5, 0), P('stoneLantern', 24.7, 165.5, 70), P('stoneLantern', 24.7, -165.5, 70)]),
+  3: () => [
+    ...yard(P('house', 30, -110)), ...yard(P('house', 30, -70)), ...yard(P('house', 28, 200)), ...yard(P('house', 28, -20)), ...yard(P('stilt', 33, 60)), ...yard(P('stilt', 33, 120)),
+    P('gate', 29, -90), P('well', 14, -130), ...[0, 40, 80, 100, 140, 180, 220, 320].map((a) => P('roundTree', 40, a + 10)), ...[230, 250, 290, 310].map((a) => P('palm', 38, a)),
+  ],
+};
 let fireflies = null;
 function pad(g, pos, toward) {
   const p = new THREE.Group();
@@ -107,18 +160,19 @@ function buildWorld(n) {
   if (world) scene.remove(world);
   world = new THREE.Group();
   const map = NIGHTS[n];
-  world.userData.pads = []; world.userData.colliders = [];
+  world.userData.pads = []; world.userData.colliders = []; world.userData.anim = [];
+  const plan = VILLAGE[n]();
   if (fireflies) { scene.remove(fireflies.obj); fireflies = null; }
   if (n === 1) {
     world.add(island(40));
-    decorate(world, [[0, 0, 70, 26, 37], [0, 0, 18, 6, 18]], (x, z) => map.lanterns.some((l) => Math.hypot(x - l[0], z - l[2]) < 4.5), [[0, 0, 40]]);
+    decorate(world, [[0, 0, 70, 26, 37], [0, 0, 18, 6, 18]], (x, z) => map.lanterns.some((l) => Math.hypot(x - l[0], z - l[2]) < 4.5), [[0, 0, 40]], plan);
   } else if (n === 2) {
     world.add(island(28, 0, 0)); world.add(island(28, 70, 0));
     const bridge = new THREE.Group();
     for (let x = 26; x < 44; x += 0.6) { const plank = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.15, 4), M.wood); plank.position.set(x + 0.3, -0.08, 0); bridge.add(plank); }
     for (const z of [-2.1, 2.1]) { const rope = new THREE.Mesh(new THREE.BoxGeometry(18, 0.08, 0.08), mat(0xc9b48a)); rope.position.set(35, -0.05, z); bridge.add(rope); }
     world.add(bridge);
-    decorate(world, [[0, 0, 34, 14, 26], [70, 0, 34, 14, 26]], (x, z) => map.lanterns.some((l) => Math.hypot(x - l[0], z - l[2]) < 4.5) || map.pads.some((p) => Math.hypot(x - p.pos[0], z - p.pos[2]) < 3.5) || map.charms.some((c) => Math.hypot(x - c[0], z - c[2]) < 3) || (Math.abs(z) < 5 && x > 18 && x < 52) || Math.hypot(x - 20, z - 18) < 4 || Math.hypot(x - 50, z + 18) < 4, [[0, 0, 28], [70, 0, 28]]);
+    decorate(world, [[0, 0, 34, 14, 26], [70, 0, 34, 14, 26]], (x, z) => map.lanterns.some((l) => Math.hypot(x - l[0], z - l[2]) < 4.5) || map.pads.some((p) => Math.hypot(x - p.pos[0], z - p.pos[2]) < 3.5) || map.charms.some((c) => Math.hypot(x - c[0], z - c[2]) < 3) || (Math.abs(z) < 5 && x > 18 && x < 52) || Math.hypot(x - 20, z - 18) < 4 || Math.hypot(x - 50, z + 18) < 4, [[0, 0, 28], [70, 0, 28]], plan);
     for (const p of map.pads) world.userData.pads.push(pad(world, p.pos, [p.toward[0] - p.pos[0], p.toward[1] - p.pos[2]]));
   } else {
     world.add(island(45));
@@ -148,7 +202,7 @@ function buildWorld(n) {
     const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.9, 1.2, 16, 1, true), mat(C.gold, { side: THREE.DoubleSide })); bell.position.y = 6.8; tower.add(bell);
     world.userData.bell = bell;
     tower.position.y = 6; world.add(tower);
-    decorate(world, [[0, 0, 60, 27, 43]], (x, z) => map.lanterns.some((l) => Math.hypot(x - l[0], z - l[2]) < 4.5) || map.ramps.some((a) => Math.hypot(x - 27 * Math.cos(a * Math.PI / 180), z - 27 * Math.sin(a * Math.PI / 180)) < 5.5) || map.charms.some((c) => Math.hypot(x - c[0], z - c[2]) < 3) || (z > -1 && Math.hypot(x, z) < 25.5), [[0, 0, 45]]);
+    decorate(world, [[0, 0, 60, 27, 43]], (x, z) => map.lanterns.some((l) => Math.hypot(x - l[0], z - l[2]) < 4.5) || map.ramps.some((a) => Math.hypot(x - 27 * Math.cos(a * Math.PI / 180), z - 27 * Math.sin(a * Math.PI / 180)) < 5.5) || map.charms.some((c) => Math.hypot(x - c[0], z - c[2]) < 3) || (z > -1 && Math.hypot(x, z) < 25.5), [[0, 0, 45]], plan);
     for (const p of map.pads) world.userData.pads.push(pad(world, p.pos, p.dir));
   }
   scene.add(world);
@@ -686,6 +740,8 @@ function render(t, dt) {
   } else if (BENCH) {
     const c = benchCamera(bench.t0 == null ? 0 : (performance.now() - bench.t0) / 1000);
     camera.position.set(c[0], c[1], c[2]); camera.lookAt(0, 0, 0);
+  } else if (CAM) { // screenshots only: ?cam=x,y,z,lookX,lookY,lookZ
+    camera.position.set(CAM[0], CAM[1], CAM[2]); camera.lookAt(CAM[3], CAM[4], CAM[5]);
   } else {
     const camDist = 10, h = 6;
     const cx = p.pos[0] - Math.sin(camYaw) * camDist, cz = p.pos[2] - Math.cos(camYaw) * camDist;
@@ -727,6 +783,7 @@ function render(t, dt) {
   ambient.intensity = 0.15 + 0.55 * k;
   scene.fog.far = 140 + 60 * k;
   sky.update(t, k, camera); cloudSea.update(t); fireflies?.update(t);
+  if (world) for (const f of world.userData.anim) f(t);
 
   // motes (instanced cores + one Points draw for the halos)
   let nm = 0;
