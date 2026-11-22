@@ -27,6 +27,22 @@ npm start          # run_cmd → mở http://localhost:5173
 
 Không muốn cài Node: dùng Docker (xem [Dockerfile](Dockerfile)) hoặc file zip trong [Release v1.0.0](../../releases/tag/v1.0.0) (đã kèm three.js; chỉ cần `node server.js`).
 
+### Cửa hàng phụ kiện + PostgreSQL bằng Docker (nhánh `feature/shop-scenery`)
+
+Chơi xong mỗi Đêm (thắng hay thua) nhận **xu** bằng điểm của Đêm đó. Vào **Cửa hàng phụ kiện** ở menu để mua và mặc cho Mây nón, áo, quần, giày (bấm vào món đồ để mặc thử). Dữ liệu cửa hàng lưu trong PostgreSQL.
+
+```bash
+docker compose up --build                 # game + PostgreSQL → http://localhost:5173
+# hoặc chỉ chạy database, game chạy bằng Node:
+docker compose up -d db
+DATABASE_URL=postgres://ddl:ddl@localhost:5433/ddl npm start
+```
+
+- Không đặt `DATABASE_URL` thì `npm start` lưu cửa hàng vào `data/shop.json`. Mở bản web tĩnh không có server thì lưu trong trình duyệt.
+- PostgreSQL được map ra cổng **5433** của máy (đổi bằng `PG_PORT`) để không đụng PostgreSQL có sẵn ở 5432. Mật khẩu `ddl` chỉ dùng cho máy cá nhân; đổi bằng biến `POSTGRES_PASSWORD`.
+- Test cửa hàng trên PostgreSQL thật: `SHOP_TEST_DATABASE_URL=postgres://ddl:ddl@localhost:5433/ddl npm test`.
+- API: `GET /api/shop/profile?name=` · `POST /api/shop/earn {name, run_id, score}` · `POST /api/shop/buy {name, item}` · `POST /api/shop/equip {name, item}`.
+
 ## Điều khiển (đổi được trong Cài đặt)
 
 | Phím mặc định | Hành động |
@@ -101,4 +117,6 @@ Toàn bộ nằm ở `web/`. Headless không import `web/`, nên đầu ra contr
 
 - **Ông Đăng** dẫn chuyện ở màn giới thiệu mỗi Đêm. Nhạc nền và mọi hiệu ứng âm thanh được **tổng hợp bằng WebAudio**, không dùng file.
 - Hạt tiến độ trên đèn, vòng sáng đúng bằng bán kính vùng an toàn, đèn lồng nhỏ trên nón Mây sáng theo số đom đóm, khăn đỏ bay theo tốc độ.
+- **Làng trên đảo** (nhánh `feature/shop-scenery`): nhà tranh và nhà sàn có cửa sổ sáng, sân có chum, đống rơm, bụi hoa, đèn đá; cổng làng, giếng, cây bàng, hàng cau; đường đá dẫn tới từng đèn; đèn trời bay lên quanh đảo. Nhà và đồ vật chặn Mây như cây/đá (chỉ ở client). Vẽ bằng instancing theo từng bộ phận.
+- **Cửa hàng phụ kiện**: 18 món ở 4 ô (5 kiểu nón: nón lá, mũ rơm, nón quai thao, khăn vấn, mũ gấm), xem trước trên Mây bằng camera xoay quanh nhân vật.
 - Bóng Mực trồi lên khi mới sinh, xẹp khi bị choáng, nghiêng về phía đèn khi hút dầu. Gió Lạc là dải lụa uốn lượn, phình to khi giữ đồ cướp được. Đom đóm rơi nhấp nháy trước khi biến mất. Chuông trên tháp đung đưa.

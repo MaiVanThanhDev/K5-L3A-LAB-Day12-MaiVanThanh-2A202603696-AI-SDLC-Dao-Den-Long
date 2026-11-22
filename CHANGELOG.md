@@ -12,6 +12,16 @@ Ghi theo phase (tag git). Mục **BREAKING** liệt kê thay đổi phá vỡ t�
 
 - Comment `SHADE_CLIMB` bị dính vào dòng `PLAYER_RADIUS` được tách lại; header `headless.js`, `game.js`, `io.js` ghi Contract v1.3.
 
+### Thêm
+
+- **Làng trên đảo** (`web/scenery.js` `village()`, `skyLanterns()`): nhà tranh, nhà sàn (cửa sổ sáng), sân nhà (chum, đống rơm, bụi hoa, đèn đá), cổng làng, giếng, cây bàng, cây cau, đường đá từ điểm xuất phát tới từng đèn, đèn trời bay lên. Mỗi loại đồ vật vẽ bằng instancing theo từng bộ phận. Nhà và đồ vật chặn Mây như cây/đá (chỉ ở client, D21). Tắt trong cảnh bench.
+- **Cửa hàng phụ kiện**: chơi xong mỗi Đêm (thắng hay thua) nhận xu bằng điểm của Đêm đó (D18, D19). 18 món ở 4 ô (nón, áo, quần, giày), mua, mặc, mặc thử; Mây có 5 kiểu nón (`web/may.js` `setOutfit`). Màn Cửa hàng có camera xoay quanh Mây. Luật dùng chung ở `src/shop-rules.js`.
+- **PostgreSQL bằng Docker**: `docker-compose.yml` (PostgreSQL 16 + game), `src/shop-store.js` (PostgreSQL có transaction, hoặc file `data/shop.json` khi không có `DATABASE_URL`), API `/api/shop/*` trong `server.js` (D20). Thêm dependency `pg`.
+- `leaderboard-rules.js`: tách `checkName()` để cửa hàng dùng chung luật tên (hành vi không đổi).
+- 5 case cửa hàng (`tests/cases-shop.js`, SH1–SH5). SH5 chạy trên PostgreSQL thật khi có `SHOP_TEST_DATABASE_URL`, không có thì bỏ qua kèm lý do.
+- `scripts/screens.js`: ảnh làng, cửa hàng, nhận xu; tham số `?cam=` (chỉ dùng khi chụp ảnh) để đặt camera.
+- Bằng chứng: [docs/proof/shop-scenery/](docs/proof/shop-scenery/README.md). Bench đo xen kẽ với `ui-upgrade`: FPS như nhau (124–128); 1 % low 28–34 ở cả hai bản, có 2/5 lần đo của nhánh này dưới 30 (giải thích trong proof).
+
 ## [Unreleased] — nhánh `ui-upgrade` (sau v1.0.0, không thuộc bài nộp)
 
 Không đổi luật, số liệu, contract hay đầu ra headless (70/70 case; 69 case cũ không đổi). Bằng chứng: [docs/proof/ui-upgrade/](docs/proof/ui-upgrade/).

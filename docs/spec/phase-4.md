@@ -34,3 +34,7 @@ Yêu cầu phi chức năng và phát hành. Mỗi mục có số đo hoặc che
 | **7. Retro & demo** | Retro 1–2 trang; video .mp4 < 5 phút. | [docs/notes/retro.md](../notes/retro.md); video: **chưa có** (xem proof README) |
 | **8. Sau v1.0.0 (nhánh feature/shop-scenery)** | | |
 | X-1 | Đẩy Bóng Mực ra mép vùng an toàn không bao giờ thả nó xuống biển mây hay vào tháp chuông; độ cao bám theo địa hình (giả định D17). | R9 |
+| X-2 | Làng trên ba đảo (nhà, cổng làng, giếng, cây, đường đá, đèn trời) chỉ ở client, chặn Mây, tắt trong bench (D21). | [proof/shop-scenery](../proof/shop-scenery/README.md): ảnh village-*, bench-scene; kiểm tra va chạm trong client thật |
+| X-3 | Mỗi Đêm chơi xong nhận xu = điểm Đêm đó, mỗi Đêm một lần (D18, D19). | SH2, SH4; ảnh result-xu |
+| X-4 | Cửa hàng 4 ô: mua trừ đúng giá, không đủ xu / đã có / chưa mua mà mặc → lỗi; mặc đồ đổi ngoại hình Mây. | SH1, SH3; ảnh shop, shop-tryon |
+| X-5 | Lưu PostgreSQL qua `docker compose`; mua song song không làm số dư âm; không có DB thì lưu file (D20). | SH4 (file, bật lại server), SH5 (PostgreSQL) |
