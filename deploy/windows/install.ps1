@@ -48,6 +48,31 @@ $tmp = Join-Path $Root 'tmp'
 $nodeExe = Join-Path $Root 'node\node.exe'
 
 function Get-File($url, $out) { Invoke-WebRequest $url -OutFile $out -UseBasicParsing }
+function Test-Hash($file, $hash, $algo) { (Test-Path $file) -and ((Get-FileHash $file -Algorithm $algo).Hash -eq $hash.ToUpper()) }
+# Download from the first source that works, accepting the file only if its hash matches.
+# Windows Server 2012 R2 (SChannel) cannot negotiate TLS with nodejs.org ("Could not create SSL/TLS secure channel"),
+# so mirrors with the same files (same SHA-256) are tried next. A file already placed in C:\ddl\tmp by hand is used
+# when its hash matches.
+function Get-Verified($urls, $out, $hash, $algo) {
+  if (Test-Hash $out $hash $algo) { Write-Host "    dùng file có sẵn $out"; return }
+  foreach ($u in $urls) {
+    for ($try = 1; $try -le 3; $try++) {   # a slow link can end a download early without any error: the hash catches it
+      try {
+        Write-Host "    $u (lần $try)"
+        Get-File $u $out
+        if (Test-Hash $out $hash $algo) { return }
+        Write-Host "    sai mã băm (tải được $((Get-Item $out).Length) byte, có thể bị đứt giữa chừng)" -ForegroundColor Red
+      } catch {
+        Write-Host "    lỗi: $($_.Exception.Message)" -ForegroundColor Red
+        if ($_.Exception.Message -match 'SSL/TLS|could not be resolved') { break }   # retrying will not help
+      }
+    }
+  }
+  if (Test-Path $out) { Remove-Item $out -Force }
+  throw "Không tải được $(Split-Path $out -Leaf). Tải bằng máy khác từ: $($urls[0]) rồi chép vào $out và chạy lại script."
+}
+# official SHA-256 (https://nodejs.org/dist/<v>/SHASUMS256.txt) of the pinned legacy build
+$NODE_SHA = @{ 'v16.20.2' = 'f8bb35f6c08dc7bf14ac753509c06ed1a7ebf5b390cd3fbdc8f8c1aedd020ec3' }
 function Expand-Zip($zip, $dest) {
   if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
   [IO.Compression.ZipFile]::ExtractToDirectory($zip, $dest)
@@ -62,8 +87,17 @@ if ($NodeVersion -eq 'latest-22') {
 $haveNode = if (Test-Path $nodeExe) { (& $nodeExe --version) } else { '' }
 if ($haveNode -ne $wantNode) {
   Step "Tải Node.js $wantNode"
-  $zip = Join-Path $tmp 'node.zip'
-  Get-File "https://nodejs.org/dist/$wantNode/node-$wantNode-win-x64.zip" $zip
+  $name = "node-$wantNode-win-x64.zip"
+  $zip = Join-Path $tmp $name
+  $sha = $NODE_SHA[$wantNode]
+  if (-not $sha) { # not pinned (e.g. latest 22 on Server 2016+): read the official checksum list
+    $sums = (Invoke-WebRequest "https://nodejs.org/dist/$wantNode/SHASUMS256.txt" -UseBasicParsing).Content
+    $sha = (($sums -split "`n") | Where-Object { $_ -match [regex]::Escape($name) } | Select-Object -First 1) -replace '\s.*$', ''
+  }
+  # mirrors checked with the Server 2012 R2 TLS 1.2 cipher list (openssl s_client) and a full download whose SHA-256
+  # matched nodejs.org; mirrors.huaweicloud.com is last (it cut downloads short in testing, the hash check catches that)
+  Get-Verified @("https://nodejs.org/dist/$wantNode/$name", "https://repo.huaweicloud.com/nodejs/$wantNode/$name",
+    "https://mirrors.aliyun.com/nodejs-release/$wantNode/$name", "https://mirrors.huaweicloud.com/nodejs/$wantNode/$name") $zip $sha 'SHA256'
   Expand-Zip $zip (Join-Path $tmp 'node')
   Get-WmiObject Win32_Process -Filter "Name = 'node.exe'" | Where-Object { $_.ExecutablePath -eq $nodeExe } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
   Remove-Item (Join-Path $Root 'node\*') -Recurse -Force
@@ -152,8 +186,13 @@ $wantCaddy = $rel.tag_name.TrimStart('v')
 if ($haveCaddy -ne $wantCaddy) {
   Step "Tải Caddy $wantCaddy (GitHub release chính thức)"
   $asset = $rel.assets | Where-Object { $_.name -like '*_windows_amd64.zip' } | Select-Object -First 1
-  $czip = Join-Path $tmp 'caddy.zip'
-  Get-File $asset.browser_download_url $czip
+  $czip = Join-Path $tmp $asset.name
+  # official SHA-512 list published with the release (caddy_<v>_checksums.txt)
+  $sumAsset = $rel.assets | Where-Object { $_.name -like '*_checksums.txt' } | Select-Object -First 1
+  $sums = (Invoke-WebRequest $sumAsset.browser_download_url -UseBasicParsing).Content
+  if ($sums -is [byte[]]) { $sums = [Text.Encoding]::ASCII.GetString($sums) }   # GitHub serves it as octet-stream
+  $csha = (($sums -split "`n") | Where-Object { $_ -match [regex]::Escape($asset.name) } | Select-Object -First 1) -replace '\s.*$', ''
+  Get-Verified @($asset.browser_download_url) $czip $csha 'SHA512'
   Expand-Zip $czip (Join-Path $tmp 'caddy')
   Copy-Item (Join-Path $tmp 'caddy\caddy.exe') $caddyExe -Force
 }
