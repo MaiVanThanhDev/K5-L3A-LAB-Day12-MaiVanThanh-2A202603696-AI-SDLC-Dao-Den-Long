@@ -70,6 +70,7 @@
     .btns { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; align-items: center; }
     button { font: inherit; font-size: 1rem; min-width: 12rem; padding: 10px 22px; border-radius: 10px; border: 0; background: var(--lamp); color: var(--sky); font-weight: 700; cursor: pointer; }
     button.ghost { background: transparent; color: var(--ui); border: 1px solid rgba(245,241,230,.4); }
+    button:disabled { opacity: .45; cursor: not-allowed; filter: none; }
     button.small { min-width: 0; padding: 4px 12px; }
     button:hover, button:focus-visible { filter: brightness(1.1); outline: 2px solid var(--core); outline-offset: 2px; }
     .row { display: flex; align-items: center; gap: 12px; justify-content: space-between; margin: 10px 0; text-align: left; }
@@ -162,6 +163,25 @@
     .divider { height: 2px; width: 40%; margin: 6px auto 14px; background: linear-gradient(90deg, transparent, var(--lamp), transparent); }
     .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
     .chip2 { padding: 4px 12px; border-radius: 999px; border: 1px solid rgba(255,179,71,.45); background: rgba(255,179,71,.08); }
+    /* accessory shop: card on the left, Mây previewed in 3D on the right */
+    #scr-shop { background: linear-gradient(90deg, rgba(8,10,26,.9) 0%, rgba(8,10,26,.6) 45%, rgba(8,10,26,0) 70%); justify-content: flex-start; padding: 0 4vw; box-sizing: border-box; }
+    .card.shop { text-align: left; max-width: 36rem; }
+    .shop-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .coins { color: var(--gold); font-weight: 700; font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+    .coins::before { content: "★ "; }
+    .tabs { display: flex; gap: 6px; margin: 12px 0 10px; }
+    .tabs button { min-width: 0; flex: 1; padding: 6px 10px; }
+    .tabs button.ghost.on { background: rgba(255,179,71,.18); border-color: var(--lamp); color: var(--core); }
+    .items { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .item { display: grid; grid-template-columns: 2.2rem 1fr; grid-template-rows: auto auto; gap: 2px 10px; align-items: center; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(245,241,230,.18); background: rgba(255,255,255,.03); cursor: pointer; }
+    .item:hover, .item.trying { border-color: var(--lamp); background: rgba(255,179,71,.08); }
+    .item.worn { border-color: var(--gold); box-shadow: 0 0 10px rgba(242,193,78,.25); }
+    .item .sw { grid-row: span 2; width: 2.2rem; height: 2.2rem; border-radius: 50%; border: 2px solid rgba(245,241,230,.5); box-sizing: border-box; }
+    .item .nm { font-weight: 700; }
+    .item button { min-width: 0; padding: 3px 10px; justify-self: start; }
+    .item .tag { opacity: .8; }
+    .chip-coins { display: inline-block; margin-top: 10px; padding: 4px 12px; border-radius: 999px; border: 1px solid rgba(242,193,78,.5); color: var(--gold); }
+    @media (max-width: 760px) { .items { grid-template-columns: 1fr; } }
   </style>
   <script type="importmap">{ "imports": { "three": "/node_modules/three/build/three.module.js" } }</script>
 </head>
@@ -198,9 +218,11 @@
       <p>Thắp đèn, châm dầu, né Bóng Mực tím đen đang hút dầu đèn yếu, và đừng để Gió Lạc cướp đom đóm của Mây.</p>
       <div class="menu-btns">
         <button id="btn-play"><span class="ic"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></span>Bắt đầu Đêm 1</button>
+        <button class="ghost" id="btn-menu-shop"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9l2-5h12l2 5M4 9h16v11H4zM9 13a3 3 0 0 0 6 0"/></svg></span>Cửa hàng phụ kiện</button>
         <button class="ghost" id="btn-menu-lb"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H4v1a4 4 0 0 0 4 4M16 6h4v1a4 4 0 0 1-4 4M12 13v4M8 20h8"/></svg></span>Bảng xếp hạng</button>
         <button class="ghost" id="btn-menu-settings"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></span>Cài đặt</button>
       </div>
+      <span class="chip-coins hidden" id="menu-coins"></span>
       <details class="controls-box panel"><summary>Điều khiển</summary>
       <div class="controls" id="controls">
         <span><kbd>W A S D</kbd></span><span>Di chuyển theo hướng camera</span>
@@ -287,6 +309,20 @@
       <table class="lb"><thead><tr><th class="num">#</th><th>Tên</th><th class="num">Điểm</th><th class="num">Đêm thắng</th><th>Thời điểm</th></tr></thead><tbody id="lb-body"></tbody></table>
       <p class="sub" id="lb-note"></p>
       <div class="btns"><button id="btn-lb-back">Về menu</button></div>
+    </div>
+  </div>
+
+  <div id="scr-shop" class="screen hidden">
+    <div class="card shop">
+      <h2>Cửa hàng phụ kiện</h2>
+      <p class="sub">Chơi xong mỗi Đêm (thắng hay thua) nhận xu bằng điểm của Đêm đó. Bấm vào món đồ để mặc thử.</p>
+      <div class="shop-top"><span class="coins" id="shop-coins">0 xu</span><span class="sub" id="shop-who"></span></div>
+      <form class="name-form hidden" id="shop-name"><label for="shop-name-in">Tên người chơi</label><input id="shop-name-in" maxlength="12" placeholder="3–12 ký tự" autocomplete="off" /><button type="submit" class="small">Dùng tên này</button></form>
+      <div class="tabs" id="shop-tabs"></div>
+      <div class="items" id="shop-items"></div>
+      <p class="warn-text" id="shop-msg" aria-live="polite"></p>
+      <p class="sub" id="shop-note"></p>
+      <div class="btns"><button id="btn-shop-back">Về menu</button></div>
     </div>
   </div>
 

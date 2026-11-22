@@ -13,6 +13,8 @@ const BASE = `http://localhost:${process.env.PORT || 5199}`;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const key = (code, ms = 120) => `(async()=>{dispatchEvent(new KeyboardEvent('keydown',{code:'${code}'}));await new Promise(r=>setTimeout(r,${ms}));dispatchEvent(new KeyboardEvent('keyup',{code:'${code}'}));})()`;
 const click = (id) => `document.getElementById('${id}').click()`;
+// shop demo player: 2400 xu from one fixed run id (paid once, so re-running the script does not add more)
+const shopDemo = "(async()=>{localStorage.setItem('ddl-last-name','Mây_Demo'); const post=(op,b)=>fetch('/api/shop/'+op,{method:'POST',body:JSON.stringify({name:'Mây_Demo',...b})}); await post('earn',{run_id:'demo-shop-1',score:2400}); ";
 
 const SHOTS = [
   { name: 'menu', url: '/' , wait: 2500 },
@@ -32,11 +34,14 @@ const SHOTS = [
   { name: 'pause', url: '/?autostart&seed=3&night=2', steps: [[key('Escape'), 800]], wait: 300 },
   { name: 'settings', url: '/?autostart&seed=3&night=2', steps: [[key('KeyP'), 500], [click('btn-pause-settings'), 500]], wait: 300 },
   { name: 'result-lost', url: '/?autostart&seed=3&night=1&scenario=/tests/scenarios/screenshot-lose.json', wait: 3500 },
-  // feature/shop-scenery: villages (houses, palms, gate, well, paths, sky lanterns)
+  // feature/shop-scenery: villages (houses, palms, gate, well, paths, sky lanterns) and the accessory shop
   { name: 'village-n1', url: '/?autostart&seed=3&night=1&scenario=/tests/scenarios/screenshot-3lit.json&cam=-6,22,-46,2,0,-8', wait: 3000 },
   { name: 'village-n1-close', url: '/?autostart&seed=3&night=1&scenario=/tests/scenarios/screenshot-3lit.json&cam=4,5,-6,9,2,10', wait: 3000 },
   { name: 'village-n2', url: '/?autostart&seed=3&night=2&cam=35,28,-40,35,0,0', wait: 3000 },
   { name: 'village-n3', url: '/?autostart&seed=3&night=3&cam=0,26,-58,0,2,-10', wait: 3000 },
+  { name: 'shop', url: '/', steps: [[shopDemo + "await post('buy',{item:'hat_quaithao'}); await post('equip',{item:'hat_quaithao'}); await post('buy',{item:'shirt_do'}); await post('equip',{item:'shirt_do'}); await window.__openShop();})()", 1500]], wait: 300 },
+  { name: 'shop-tryon', url: '/', steps: [[shopDemo + "await window.__openShop();})()", 1200], ["document.querySelector('#shop-tabs [data-tab=shirt]').click()", 300], ["document.querySelector('.item[data-id=shirt_gam] .nm').click()", 300], ["document.querySelector('#shop-tabs [data-tab=hat]').click()", 300], ["document.querySelector('.item[data-id=hat_mugam] .nm').click()", 600]], wait: 300 },
+  { name: 'result-xu', url: '/?autostart&seed=3&night=1', steps: [["localStorage.setItem('ddl-last-name','Xu_Check'); const g = window.__game(); g.score = 345; g.player.flames = 0;", 2500]], wait: 300 },
   { name: 'dawn', url: '/?autostart&seed=3&night=3&scenario=/tests/scenarios/screenshot-win3.json', steps: [[key('KeyE', 200), 2500]], wait: 300 },
 ];
 

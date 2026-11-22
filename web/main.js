@@ -7,6 +7,8 @@ import { benchScenario, benchCamera } from '/src/sim/bench.js';
 import { createSky, createCloudSea, islandMesh, decorations, grass, ambientFireflies, radialTexture, shadowTexture, village, skyLanterns, PROP_RADIUS } from '/web/scenery.js';
 import { createMay } from '/web/may.js';
 import { validate as validateEntry, insert as insertEntry } from '/src/leaderboard-rules.js';
+import { CATALOG, SLOTS, SLOT_NAMES, ITEMS, MAX_EARN, DEFAULT_OUTFIT, outfitItems } from '/src/shop-rules.js';
+import { savedName, setSavedName, validName, buyItem, equipItem, queueEarn, flushEarnings, pendingXu } from '/web/shop.js';
 
 const contract = await (await fetch('/game.contract.json')).json();
 const T = contract.tuning;
@@ -58,7 +60,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(C.sky);
 scene.fog = new THREE.Fog(C.mist, 30, 130);
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 500);
-addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); if (mode === 'shop') applyShopView(); });
 
 // Ambient light grows with progress: intensity = 0.15 + 0.55 × lit / total (Ticket-02).
 const ambient = new THREE.AmbientLight(0xb8c4ff, 0.15);
@@ -363,7 +365,7 @@ function readInput() {
 
 // ---------- flow ----------
 const $ = (id) => document.getElementById(id);
-const screens = ['scr-menu', 'scr-intro', 'scr-pause', 'scr-settings', 'scr-result', 'scr-dawn', 'scr-lb'];
+const screens = ['scr-menu', 'scr-intro', 'scr-pause', 'scr-settings', 'scr-result', 'scr-dawn', 'scr-lb', 'scr-shop'];
 const show = (id) => { for (const s of screens) $(s).classList.toggle('hidden', s !== id); };
 const INTRO = {
   1: 'Mây ơi, sương đen tràn qua bến rồi. Năm ngọn đèn lớn đang chờ cháu, mỗi ngọn cần mười đốm sáng. Đèn sáng thì Bóng Mực không dám lại gần.',
@@ -498,6 +500,7 @@ function nameEntry(container) {
     const res = await saveLb(body);
     if (res.error) { msg.textContent = `⚠ ${res.error === 'name must be 3–12 characters: letters, digits or _' ? 'Tên cần 3–12 ký tự: chữ, số hoặc _' : res.error}`; return; }
     try { localStorage.setItem('ddl-last-name', input.value.trim()); } catch { /* ignore */ }
+    refreshProfile(); // the same name collects the xu waiting for the shop
     lastSaved = res.entries[res.rank - 1] ?? null;
     container.innerHTML = `<p>${res.rank ? `Đã lưu: hạng <b>${res.rank}</b>` : 'Đã lưu, nhưng chưa vào top 10'}.</p><div class="btns"><button class="ghost small" type="button">Xem bảng xếp hạng</button></div>`;
     container.querySelector('button').addEventListener('click', () => showLeaderboard());
@@ -512,6 +515,79 @@ async function showLeaderboard() {
     : '<tr><td colspan="5">Chưa có điểm nào. Hãy chơi một ván!</td></tr>';
   $('lb-note').textContent = where === 'disk' ? 'Lưu trên đĩa (data/leaderboard.json). Xuất: npm start -- --export-leaderboard out.json' : 'Không có server: đang lưu trong trình duyệt này.';
 }
+
+// ---------- accessory shop (creative feature: xu after every Night, outfits for Mây; never in the bench scene) ----------
+const shop = { profile: null, tab: 'hat', trying: {} }; // trying = { slot: itemId } shown on Mây before buying
+const wearOutfit = (equipped) => { if (!BENCH) may.setOutfit(outfitItems(equipped)); };
+async function refreshProfile() {
+  const name = validName(savedName());
+  if (BENCH || !name) { shop.profile = null; renderCoins(); return null; }
+  try { shop.profile = await flushEarnings(name); } catch { /* keep the last profile */ }
+  renderCoins();
+  if (shop.profile && mode !== 'shop') wearOutfit(shop.profile.equipped);
+  return shop.profile;
+}
+function renderCoins() {
+  const el = $('menu-coins'), pend = pendingXu();
+  el.classList.toggle('hidden', !shop.profile && !pend);
+  el.textContent = shop.profile ? `★ ${shop.profile.balance} xu · ${shop.profile.name}` : `★ ${pend} xu đang chờ: đặt tên trong Cửa hàng để nhận`;
+}
+const applyShopView = () => camera.setViewOffset(innerWidth, innerHeight, -Math.round(innerWidth * 0.2), 0, innerWidth, innerHeight);
+function openShop() {
+  stopMusic(); mode = 'shop'; $('hud').classList.add('hidden'); show('scr-shop');
+  shop.trying = {}; $('shop-msg').textContent = '';
+  applyShopView(); renderShop();
+  return refreshProfile().then(() => { wearOutfit(shop.profile ? shop.profile.equipped : DEFAULT_OUTFIT); renderShop(); });
+}
+function closeShop() {
+  shop.trying = {}; camera.clearViewOffset();
+  wearOutfit(shop.profile ? shop.profile.equipped : DEFAULT_OUTFIT);
+  toMenu();
+}
+const hexCss = (c) => `#${c.toString(16).padStart(6, '0')}`;
+function renderShop() {
+  const p = shop.profile, worn = p ? p.equipped : DEFAULT_OUTFIT, pend = pendingXu();
+  $('shop-coins').textContent = `${p ? p.balance : 0} xu`;
+  $('shop-who').textContent = p ? `Người chơi: ${p.name}` : '';
+  $('shop-name').classList.toggle('hidden', !!p);
+  const where = { postgres: 'Lưu trên máy chủ (PostgreSQL).', file: 'Lưu trên máy chủ (data/shop.json).', browser: 'Không có máy chủ: đang lưu trong trình duyệt này.' };
+  $('shop-note').textContent = p ? `${where[p.storage] || ''}${pend ? ` Còn ${pend} xu chưa nhận.` : ''}` : `Nhập tên để nhận ${pend} xu đang chờ và mua đồ.`;
+  $('shop-tabs').innerHTML = SLOTS.map((s) => `<button type="button" class="ghost small${s === shop.tab ? ' on' : ''}" data-tab="${s}">${SLOT_NAMES[s]}</button>`).join('');
+  $('shop-items').innerHTML = CATALOG.filter((it) => it.slot === shop.tab).map((it) => {
+    const owned = it.price === 0 || (p && p.owned.includes(it.id)), isWorn = worn[it.slot] === it.id, trying = shop.trying[it.slot] === it.id;
+    const act = isWorn ? '<span class="tag">✓ Đang mặc</span>' : owned ? '<button type="button" class="small" data-equip>Mặc</button>'
+      : `<button type="button" class="small" data-buy${!p || p.balance < it.price ? ' disabled' : ''}>Mua · ${it.price} xu</button>`;
+    return `<div class="item${isWorn ? ' worn' : ''}${trying ? ' trying' : ''}" data-id="${it.id}"><span class="sw" style="background:${hexCss(it.color)}"></span><span class="nm">${it.name}</span>${act}</div>`;
+  }).join('');
+  for (const b of $('shop-tabs').querySelectorAll('button')) b.addEventListener('click', () => { shop.tab = b.dataset.tab; renderShop(); sfx.click(); });
+  for (const el of $('shop-items').querySelectorAll('.item')) {
+    const it = ITEMS[el.dataset.id];
+    el.addEventListener('click', async (e) => {
+      const msg = $('shop-msg'), name = shop.profile?.name, onButton = e.target.matches('button');
+      try {
+        if (e.target.matches('[data-buy]')) {
+          shop.profile = await buyItem(name, it.id);
+          shop.profile = await equipItem(name, it.id);
+          msg.textContent = `Đã mua ${it.name}!`; sfx.charm();
+        } else if (e.target.matches('[data-equip]')) {
+          shop.profile = await equipItem(name, it.id); msg.textContent = ''; sfx.click();
+        } else { shop.trying[it.slot] = it.id; msg.textContent = ''; sfx.click(); }
+        if (onButton) delete shop.trying[it.slot];
+      } catch (err) { msg.textContent = `⚠ ${err.message}`; }
+      wearOutfit({ ...(shop.profile ? shop.profile.equipped : DEFAULT_OUTFIT), ...shop.trying });
+      renderCoins(); renderShop();
+    });
+  }
+}
+$('btn-menu-shop').addEventListener('click', () => { unlock(); openShop(); });
+$('btn-shop-back').addEventListener('click', closeShop);
+$('shop-name').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const n = validName($('shop-name-in').value);
+  if (!n) { $('shop-msg').textContent = '⚠ Tên cần 3–12 ký tự: chữ, số hoặc _'; return; }
+  setSavedName(n); $('shop-msg').textContent = '';
+  await refreshProfile(); renderShop(); sfx.click();
+});
 
 function toMenu() { stopMusic(); mode = 'menu'; $('hud').classList.add('hidden'); renderNightCards(); show('scr-menu'); }
 function renderNightCards() {
@@ -554,8 +630,12 @@ function endNight({ result, reason }) {
   mode = 'result'; stopMusic(); document.exitPointerLock?.();
   const won = result === 'won';
   if (won) { campaign.scores[night] = game.score; sfx.win(); } else sfx.lose();
+  // shop: every finished Night (won or lost) pays xu = its score, once (run id); not for scripted scenario runs
+  const earned = BENCH || urlScenario ? 0 : Math.min(game.score, MAX_EARN);
+  if (earned > 0) { queueEarn(`${Date.now().toString(36)}-${night}`, earned); refreshProfile(); }
+  const xuLine = earned > 0 ? `<span>Xu cho Cửa hàng${validName(savedName()) ? '' : ' (đặt tên để nhận)'}</span><b>+${earned}</b>` : '';
   if (won && night === 3) {
-    $('dawn-stats').innerHTML = [1, 2, 3].map((n) => `<span>Đêm ${n} · ${NIGHTS[n].name}</span><b>${campaign.scores[n] ?? '—'}</b>`).join('') + `<span>Tổng điểm</span><b>${totalScore()}</b>`;
+    $('dawn-stats').innerHTML = [1, 2, 3].map((n) => `<span>Đêm ${n} · ${NIGHTS[n].name}</span><b>${campaign.scores[n] ?? '—'}</b>`).join('') + `<span>Tổng điểm</span><b>${totalScore()}</b>` + xuLine;
     nameEntry($('scr-dawn').querySelector('.name-entry'));
     setTimeout(() => { show('scr-dawn'); $('hud').classList.add('hidden'); }, 900);
     return;
@@ -565,7 +645,7 @@ function endNight({ result, reason }) {
   $('res-title').textContent = won ? `Đêm ${night} hoàn thành!` : 'Chưa thành công…';
   $('res-why').textContent = why;
   const lit = game.lanterns.filter((l) => l.lit).length;
-  $('res-stats').innerHTML = `<span>Đèn đã thắp</span><b>${lit}/${game.lanterns.length}</b><span>Ngọn Lửa còn lại</span><b>${Math.max(0, game.player.flames)}</b><span>Điểm Đêm này</span><b>${game.score}</b><span>Tổng điểm (các Đêm đã thắng)</span><b>${totalScore()}</b>`;
+  $('res-stats').innerHTML = `<span>Đèn đã thắp</span><b>${lit}/${game.lanterns.length}</b><span>Ngọn Lửa còn lại</span><b>${Math.max(0, game.player.flames)}</b><span>Điểm Đêm này</span><b>${game.score}</b><span>Tổng điểm (các Đêm đã thắng)</span><b>${totalScore()}</b>${xuLine}`;
   $('res-main').textContent = won ? `Đêm ${night + 1}: ${NIGHTS[night + 1].name}` : `Chơi lại Đêm ${night}`;
   $('res-main').onclick = () => showIntro(won ? night + 1 : night);
   const ne = $('scr-result').querySelector('.name-entry');
@@ -733,7 +813,11 @@ function render(t, dt) {
   playerShadow.visible = player.visible && gh !== null && gh !== Infinity;
   if (playerShadow.visible) { playerShadow.position.set(p.pos[0], gh + 0.04, p.pos[2]); const hgt = Math.max(0, p.pos[1] - gh); playerShadow.scale.setScalar(1 / (1 + hgt * 0.35)); playerShadow.material.opacity = 1 / (1 + hgt * 0.5); }
 
-  if (!BENCH && (mode === 'menu' || mode === 'intro')) {
+  if (!BENCH && mode === 'shop') { // close orbit around Mây (the view offset keeps her right of the shop card)
+    const a = t * 0.35;
+    camera.position.set(p.pos[0] + Math.sin(a) * 3.6, p.pos[1] + 1.8, p.pos[2] + Math.cos(a) * 3.6);
+    camera.lookAt(p.pos[0], p.pos[1] + 1.0, p.pos[2]);
+  } else if (!BENCH && (mode === 'menu' || mode === 'intro')) {
     const map = NIGHTS[night], a = t * 0.06, R = map.boundR * 1.25;
     camera.position.set(map.center[0] + R * Math.cos(a), 26, map.center[1] + R * Math.sin(a));
     camera.lookAt(map.center[0], 0, map.center[1]);
@@ -932,6 +1016,7 @@ if (params.has('large')) settings.largeText = true;
 applyColorblind();
 applyA11y();
 renderNightCards();
-window.__showLeaderboard = showLeaderboard; window.__openSettings = () => openSettings('scr-menu');
+window.__showLeaderboard = showLeaderboard; window.__openSettings = () => openSettings('scr-menu'); window.__openShop = openShop;
+if (!BENCH) refreshProfile();
 if (params.has('autostart') || BENCH) { show(null); mode = 'playing'; $('hud').classList.remove('hidden'); }
 requestAnimationFrame(frame);

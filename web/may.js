@@ -43,14 +43,44 @@ export function createMay(C) {
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.06, 8, 18), scarfM); ring.rotation.x = Math.PI / 2; ring.position.y = 1.2; body.add(ring);
   const tailG = new THREE.BoxGeometry(0.12, 0.04, 0.42); tailG.translate(0, 0, -0.21);
   const tails = [-0.06, 0.07].map((x, k) => { const t = new THREE.Group(); t.position.set(x, 1.2, -0.18); t.add(new THREE.Mesh(tailG, scarfM)); t.userData.k = k; body.add(t); return t; });
-  // nón lá: wide flat cone with rings, chin strap, small lantern on a string at the front brim
+  // headwear (shop item, default nón lá) + small lantern on a string hanging at the front brim
   const hat = new THREE.Group(); hat.position.y = 0.2; head.add(hat);
-  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.34, 28, 1, true), new THREE.MeshLambertMaterial({ color: C.sand, side: THREE.DoubleSide }));
-  cone.position.y = 0.12; hat.add(cone);
-  for (const [r, y] of [[0.5, 0.025], [0.34, 0.11], [0.18, 0.2]]) {
-    const band = new THREE.Mesh(new THREE.TorusGeometry(r, 0.008, 4, 28), lam(0xa8936a)); band.rotation.x = Math.PI / 2; band.position.y = y; hat.add(band);
+  let hatModel = null;
+  const lanternPivot = new THREE.Group(); hat.add(lanternPivot);
+  function setHat(style, color) {
+    if (hatModel) { hat.remove(hatModel); hatModel.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); }); }
+    const g = (hatModel = new THREE.Group()); hat.add(g);
+    const add = (geo, mat, y = 0, rx = 0) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.rotation.x = rx; g.add(m); return m; };
+    const ring = (r, t, y, c, seg = 4) => add(new THREE.TorusGeometry(r, t, seg, 28), lam(c), y, Math.PI / 2);
+    let brim = [0, -0.03, 0.56]; // where the lantern string starts
+    if (style === 'rom') { // mũ rơm: flat brim, round crown, red band
+      add(new THREE.CylinderGeometry(0.5, 0.5, 0.03, 26), lam(color), 0);
+      add(new THREE.CylinderGeometry(0.21, 0.25, 0.2, 18), lam(color), 0.11);
+      ring(0.245, 0.02, 0.04, 0xa8262a);
+      brim = [0, -0.01, 0.46];
+    } else if (style === 'quaithao') { // nón quai thao: wide flat lacquered disc, gold rim, small crown, hanging tassels
+      add(new THREE.CylinderGeometry(0.74, 0.74, 0.04, 32), lam(color), 0.02);
+      add(new THREE.CylinderGeometry(0.19, 0.21, 0.08, 18), lam(0x3b2a1c), 0.08);
+      ring(0.73, 0.012, 0.02, 0xf2c14e);
+      for (const sd of [-1, 1]) { const t = add(new THREE.CylinderGeometry(0.008, 0.008, 0.5, 4), lam(0xc8102e), -0.22); t.position.x = 0.3 * sd; }
+      brim = [0, 0, 0.68];
+    } else if (style === 'khan') { // khăn vấn: two wrapped rings of cloth
+      ring(0.215, 0.07, -0.03, color, 8);
+      ring(0.17, 0.06, 0.05, color, 8).rotation.z = 0.15;
+      brim = [0, 0.0, 0.3];
+    } else if (style === 'mu') { // mũ gấm: brocade cylinder with brim ring and a red jewel at the front
+      add(new THREE.CylinderGeometry(0.23, 0.25, 0.22, 18), lam(color, { emissive: 0x3a2a00 }), 0.08);
+      add(new THREE.CylinderGeometry(0.25, 0.25, 0.02, 18), lam(0xc8102e), 0.2);
+      ring(0.26, 0.025, -0.02, 0xc89a2e);
+      const gem = add(new THREE.SphereGeometry(0.045, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff3a4a }), 0.08); gem.position.z = 0.24;
+      brim = [0, -0.02, 0.32];
+    } else { // nón lá: wide flat cone with three rings
+      add(new THREE.ConeGeometry(0.62, 0.34, 28, 1, true), new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }), 0.12);
+      for (const [r, y] of [[0.5, 0.025], [0.34, 0.11], [0.18, 0.2]]) ring(r, 0.008, y, 0xa8936a);
+    }
+    lanternPivot.position.set(brim[0], brim[1], brim[2]);
   }
-  const lanternPivot = new THREE.Group(); lanternPivot.position.set(0, -0.03, 0.56); hat.add(lanternPivot);
+  setHat('nonla', C.sand);
   const string = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.22, 4), lam(0x222222)); string.position.y = -0.11; lanternPivot.add(string);
   const lanternMat = new THREE.MeshBasicMaterial({ color: C.lampOn });
   const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), lanternMat); lantern.scale.y = 1.25; lantern.position.y = -0.27; lanternPivot.add(lantern);
@@ -63,6 +93,11 @@ export function createMay(C) {
   let phase = 0, swing = 0, swingV = 0, lean = 0, dashFx = 0;
   return {
     root, light,
+    // outfit = { hat, shirt, pants, shoes } catalog items (src/shop-rules.js outfitItems); the tunic sleeves follow the shirt
+    setOutfit(o) {
+      robe.color.setHex(o.shirt.color); pants.color.setHex(o.pants.color); shoe.color.setHex(o.shoes.color);
+      setHat(o.hat.style, o.hat.color);
+    },
     update(dt, s) {
       // s = { speed (m/s horizontal), grounded, vy, dashing, carried, t }
       const run = Math.min(1, s.speed / 6);
