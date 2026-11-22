@@ -45,7 +45,7 @@ DATABASE_URL=postgres://ddl:ddl@localhost:5433/ddl npm start
 
 ### Deploy lên VPS
 
-- **VPS Windows** (Windows Server 2016+, không cần Docker): mở PowerShell bằng **Run as Administrator**:
+- **VPS Windows** (từ PowerShell 4 / Windows Server 2012 R2 trở lên, không cần Docker). Server 2016 trở lên dùng Node 22 và Caddy mới nhất; Windows cũ hơn tự dùng Node 16.20.2 và Caddy 2.6.4 (Node 18+ và Go 1.21+ không còn chạy trên đó). Mở PowerShell bằng **Run as Administrator**:
 
   ```powershell
   Set-ExecutionPolicy -Scope Process Bypass -Force
