@@ -58,6 +58,13 @@ export const sfx = {
   win: () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone({ f, t: 0.7, g: 0.2, type: 'triangle', delay: i * 0.12 })),
   lose: () => [392, 330, 262, 196].forEach((f, i) => tone({ f, t: 0.6, g: 0.18, type: 'sine', delay: i * 0.18 })),
   click: () => tone({ f: 700, t: 0.05, g: 0.1, type: 'triangle' }),
+  // extras (ADR 0002): Diệt Bóng and the boss Chúa Bóng Mực
+  banish: () => { tone({ f: 1600, f2: 400, t: 0.28, g: 0.2, type: 'square' }); noise({ t: 0.25, g: 0.12, f: 3000, sweep: 800 }); },
+  banishKill: () => [1047, 1568, 2093].forEach((f, i) => tone({ f, t: 0.25, g: 0.12, type: 'triangle', delay: i * 0.05 })),
+  boss: () => { [55, 58, 82].forEach((f) => tone({ f, f2: f * 0.7, t: 1.8, g: 0.22, type: 'sawtooth' })); noise({ t: 1.5, g: 0.1, f: 200, sweep: 80 }); },
+  bossCast: () => { tone({ f: 90, f2: 360, t: 1.4, g: 0.2, type: 'sawtooth' }); tone({ f: 95, f2: 380, t: 1.4, g: 0.12, type: 'square' }); },
+  bossSkill: () => { tone({ f: 160, f2: 40, t: 0.9, g: 0.35, type: 'sawtooth' }); noise({ t: 0.7, g: 0.25, f: 250, sweep: 60 }); },
+  bossHit: () => { tone({ f: 330, f2: 110, t: 0.5, g: 0.3, type: 'square' }); noise({ t: 0.3, g: 0.15, f: 1200 }); },
 };
 
 // Night music: low drone + slow pentatonic arpeggio, a little brighter for each night.

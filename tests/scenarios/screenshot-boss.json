@@ -1,0 +1,9 @@
+{
+  "random_motes": true,
+  "random_shades": false,
+  "lanterns": [{ "id": "L1", "lit": true, "fuel": 70 }, { "id": "L2", "lit": true }],
+  "player": { "pos": [0, 0, 11], "carried": 8, "flames": 3 },
+  "shades": [{ "id": "S1", "pos": [-1.5, 1, 13], "state": "stunned", "state_ticks_left": 600 }, { "id": "S2", "pos": [3.5, 1, 9], "state": "chase" }],
+  "boss": { "pos": [6, 1, 19], "state": "cast", "state_ticks_left": 420, "next_skill": "eclipse", "hp": 2 },
+  "time_left_s": 150
+}

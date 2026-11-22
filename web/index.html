@@ -2,8 +2,15 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <title>Đảo Đèn Lồng</title>
+  <meta name="theme-color" content="#0E1430" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/web/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/web/icons/icon-192.png" />
   <style>
     /* Sizes in rem: 1rem = 18 px (minimum UI text at 1280×720), html.large → ×1.25 (Ticket-04 accessibility). */
     :root {
@@ -182,6 +189,67 @@
     .item .tag { opacity: .8; }
     .chip-coins { display: inline-block; margin-top: 10px; padding: 4px 12px; border-radius: 999px; border: 1px solid rgba(242,193,78,.5); color: var(--gold); }
     @media (max-width: 760px) { .items { grid-template-columns: 1fr; } }
+
+    /* ======== extras (ADR 0002): boss bar, Diệt Bóng cooldown ======== */
+    #hud-boss { position: absolute; top: 4.6rem; left: 50%; transform: translateX(-50%); width: min(26rem, 60vw); padding: 6px 12px 8px; text-align: center; border-color: rgba(155, 92, 255, .6); }
+    #hud-boss .bname { color: #d9c2ff; font-weight: 700; letter-spacing: 1px; }
+    #hud-boss .hp { display: flex; gap: 4px; margin-top: 5px; }
+    #hud-boss .hp i { flex: 1; height: .65rem; border-radius: 4px; background: #9b5cff; box-shadow: 0 0 8px #9b5cff; }
+    #hud-boss .hp i.lost { background: rgba(245,241,230,.15); box-shadow: none; }
+    #hud-boss .cast { margin-top: 5px; color: var(--danger); font-weight: 700; min-height: 1.2em; }
+    #hud-boss .castbar { height: .35rem; border-radius: 3px; background: rgba(245,241,230,.15); overflow: hidden; margin-top: 3px; }
+    #hud-boss .castbar i { display: block; height: 100%; width: 0; background: var(--danger); }
+    #hud-boss.stunned .bname::after { content: " · choáng!"; color: var(--core); }
+    body.reduced #hud-boss .hp i { box-shadow: none; }
+    #cd-banish { border-color: rgba(155, 92, 255, .8); }
+    body.boss-on #hud-msg { top: 10.6rem; }
+
+    /* ======== touch controls (phones, Android app) ======== */
+    #touch { position: absolute; inset: 0; pointer-events: none; }
+    #t-stick-zone, #t-look-zone { position: absolute; top: 18%; bottom: 0; pointer-events: auto; touch-action: none; }
+    #t-stick-zone { left: 0; width: 45%; }
+    #t-look-zone { right: 0; width: 55%; }
+    #t-stick { position: absolute; width: 140px; height: 140px; border-radius: 50%; background: rgba(245,241,230,.08); border: 2px solid rgba(255,179,71,.45); pointer-events: none; }
+    #t-knob { position: absolute; left: 42px; top: 42px; width: 56px; height: 56px; border-radius: 50%; background: radial-gradient(circle, #FFE9B0, #FFB347); box-shadow: 0 0 14px rgba(255,179,71,.7); }
+    #t-btns { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: 14px; display: grid; grid-template-columns: repeat(3, 4.2rem); grid-template-rows: 4.2rem 4.2rem; gap: 10px; pointer-events: auto; touch-action: none; }
+    .t-btn { --cd: 0; position: relative; min-width: 0; width: 4.2rem; height: 4.2rem; padding: 0; border-radius: 50%; background: rgba(14,20,48,.72); border: 2px solid rgba(242,193,78,.7); color: var(--ui); display: flex; flex-direction: column; align-items: center; justify-content: center; touch-action: none; }
+    .t-btn span { font-size: 1.5rem; line-height: 1; }
+    .t-btn small { font-size: .55rem; opacity: .85; margin-top: 2px; white-space: nowrap; }
+    .t-btn::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(rgba(0,0,0,.66) calc(var(--cd) * 1turn), transparent 0); pointer-events: none; }
+    .t-btn.down { background: rgba(255,179,71,.45); transform: scale(.94); }
+    .t-btn[data-a="banish"] { border-color: #9b5cff; }
+    .t-btn[data-a="pulse"] { grid-column: 3; grid-row: 1; }
+    .t-btn[data-a="banish"] { grid-column: 2; grid-row: 1; }
+    .t-btn[data-a="interact"] { grid-column: 1; grid-row: 1; }
+    .t-btn[data-a="dash"] { grid-column: 2; grid-row: 2; }
+    .t-btn[data-a="jump"] { grid-column: 3; grid-row: 2; }
+    .t-btn.charm { border-color: var(--scarf); box-shadow: 0 0 10px var(--scarf); }
+    #t-pause { position: absolute; top: 10px; left: 50%; transform: translateX(calc(-50% - 9.5rem)); min-width: 0; width: 2.6rem; height: 2.6rem; padding: 0; border-radius: 50%; background: rgba(14,20,48,.72); color: var(--ui); border: 1px solid rgba(245,241,230,.4); pointer-events: auto; font-size: .9rem; }
+    body.touch #hud-cds, body.touch #fps { display: none; }
+    body.touch #hud-bar { bottom: 8px; left: 40%; }
+    body.touch .cell { width: 14px; height: 14px; }
+    body.touch #captions { bottom: auto; top: 9rem; }
+    body.touch details.controls-box { display: none; }
+    /* small landscape screens (phones): compact UI */
+    @media (max-height: 520px) {
+      :root { font-size: 14px; }
+      html.large { font-size: 17.5px; }
+      #minimap { width: 104px; height: 104px; left: 8px; bottom: auto; top: 3.6rem; }
+      #hud-right { min-width: 10rem; padding: 4px 8px; top: 6px; right: max(8px, env(safe-area-inset-right)); }
+      #hud-lanterns { display: none; }
+      #hud-flames { top: 6px; left: max(8px, env(safe-area-inset-left)); }
+      #hud-top { top: 6px; }
+      #hud-boss { top: 3.7rem; width: min(17rem, 40vw); padding: 3px 10px 5px; }
+      #hud-boss .hp i { height: .45rem; }
+      #hud-boss .cast { font-size: .85rem; margin-top: 3px; }
+      body.boss-on #hud-msg { top: 8.4rem; }
+      .menu-hero > p:not(.tagline) { display: none; }
+      .menu-btns button { padding: 7px 18px; }
+      .night-cards { display: none; }
+      #scr-menu { padding: 0 4vw; }
+      .menu-hero h1 { font-size: 2.2rem; }
+      .card { padding: 14px 18px; }
+    }
   </style>
   <script type="importmap">{ "imports": { "three": "/node_modules/three/build/three.module.js" } }</script>
 </head>
@@ -195,6 +263,8 @@
     <div id="hud-right" class="panel"><div>Đèn sáng <b id="hud-lit">0/5</b></div><div id="hud-need"></div><div id="hud-lanterns"></div><div id="hud-score">0</div></div>
     <canvas id="minimap" class="panel" width="344" height="344"></canvas>
     <div id="hud-charm" class="hidden">Bùa Gió <span id="hud-charm-s"></span></div>
+    <div id="hud-boss" class="panel hidden"><div class="bname">Chúa Bóng Mực</div><div class="hp" id="hud-boss-hp"></div><div class="cast" id="hud-boss-cast"></div><div class="castbar"><i id="hud-boss-castbar"></i></div></div>
+    <div id="boss-arrow" class="edge-arrow shade-arrow hidden"></div>
     <div id="hud-msg"></div>
     <div id="hud-prompt" class="hidden"></div>
     <div id="hud-arrow" class="edge-arrow hidden"></div>
@@ -206,6 +276,8 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="#F5F1E6" stroke-width="2.2" stroke-linecap="round"><path d="M3 8h9M5 12h11M3 16h9M14 6l6 6-6 6"/></svg><span class="lbl">Lướt</span><div class="shade"></div></div>
       <div class="cd" id="cd-pulse"><span class="key" id="key-pulse">Q</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="#FFB347" stroke-width="2.2"><circle cx="12" cy="12" r="3" fill="#FFE9B0"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="10.5" opacity=".5"/></svg><span class="lbl">Tỏa sáng</span><div class="shade"></div></div>
+      <div class="cd hidden" id="cd-banish"><span class="key" id="key-banish">F</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="#D9C2FF" stroke-width="2.2" stroke-linecap="round"><path d="M5 19 19 5M14 5h5v5M4 14l6 6M7 17l-3 3"/></svg><span class="lbl">Diệt Bóng</span><div class="shade"></div></div>
     </div>
   </div>
   <div id="flash"></div>
@@ -231,6 +303,7 @@
         <span><kbd>Shift</kbd></span><span>Lướt</span>
         <span><kbd>E</kbd></span><span>Nạp ánh sáng vào đèn</span>
         <span><kbd>Q</kbd> · chuột trái</span><span>Tỏa sáng (tốn 3 đom đóm)</span>
+        <span><kbd>F</kbd> · chuột phải</span><span>Diệt Bóng: xóa Bóng Mực đang choáng (tốn 2)</span>
         <span><kbd>Esc</kbd> · <kbd>P</kbd></span><span>Tạm dừng</span>
       </div></details>
     </div>

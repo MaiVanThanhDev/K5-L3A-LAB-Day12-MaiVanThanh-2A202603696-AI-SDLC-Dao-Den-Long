@@ -34,9 +34,13 @@ function applyColorblind() {
 
 // ---------- settings (persisted) ----------
 // Key bindings (Ticket-04 accessibility): every action can be rebound; duplicates are reported; Esc always pauses too.
-const DEFAULT_KEYS = { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', dash: 'ShiftLeft', interact: 'KeyE', pulse: 'KeyQ', pause: 'KeyP' };
+const DEFAULT_KEYS = { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', dash: 'ShiftLeft', interact: 'KeyE', pulse: 'KeyQ', banish: 'KeyF', pause: 'KeyP' };
 const ACTIONS = [['up', 'Tiến (theo camera)'], ['down', 'Lùi'], ['left', 'Sang trái'], ['right', 'Sang phải'], ['jump', 'Nhảy'], ['dash', 'Lướt'],
-  ['interact', 'Tương tác: nạp / thắp lại / châm dầu'], ['pulse', 'Tỏa Sáng'], ['pause', 'Tạm dừng']];
+  ['interact', 'Tương tác: nạp / thắp lại / châm dầu'], ['pulse', 'Tỏa Sáng'], ['banish', 'Diệt Bóng (Bóng Mực đang choáng)'], ['pause', 'Tạm dừng']];
+// Extras (ADR 0002): Diệt Bóng + boss Chúa Bóng Mực are on in normal play; off in the bench scene and with ?noextras.
+const EXTRAS = !BENCH && !params.has('noextras');
+// Touch controls (phones / tablets, the Android app): on for coarse pointers, forced with ?touch.
+const TOUCH = !BENCH && (params.has('touch') || matchMedia('(pointer: coarse)').matches);
 const settings = { volume: 0.7, sens: 1, colorblind: false, captions: true, reducedMotion: false, largeText: false, keys: { ...DEFAULT_KEYS } };
 try {
   const saved = JSON.parse(localStorage.getItem('ddl-settings') || '{}');
@@ -310,6 +314,45 @@ function sync(views, items, make) {
 function clearViews() {
   for (const views of [drifterViews, charmViews, lanternViews]) { for (const v of views.values()) scene.remove(v.g); views.clear(); }
   shadeAnim.clear(); shadeBodies.count = shadeEdges.count = shadeEyes.count = shadeShadows.count = moteCores.count = 0; haloGeo.setDrawRange(0, 0);
+  bossView.g.visible = false; bossView.fade = 0; shadeLastPos.clear();
+}
+
+// ---------- boss Chúa Bóng Mực (extras): big ink body, violet crown, red eyes, cast rings ----------
+const shadeLastPos = new Map(); // id → last drawn position (bursts for banished shades)
+const bossView = (() => {
+  const g = new THREE.Group(); g.visible = false;
+  const body = new THREE.Group(); g.add(body);
+  const core = new THREE.Mesh(new THREE.SphereGeometry(1.5, 24, 16), new THREE.MeshBasicMaterial({ color: C.shadeBody }));
+  const edgeMat = new THREE.MeshBasicMaterial({ color: C.shadeEdge, side: THREE.BackSide });
+  const edge = new THREE.Mesh(new THREE.SphereGeometry(1.62, 24, 16), edgeMat);
+  body.add(core, edge);
+  const crownMat = new THREE.MeshBasicMaterial({ color: 0x9b5cff });
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2, spike = new THREE.Mesh(new THREE.ConeGeometry(0.22, i % 2 ? 0.7 : 1.1, 6), crownMat);
+    spike.position.set(Math.sin(a) * 0.9, 1.45, Math.cos(a) * 0.9); spike.rotation.set(Math.cos(a) * 0.35, 0, -Math.sin(a) * 0.35); body.add(spike);
+  }
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff3b5c });
+  for (const x of [-0.5, 0.5]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), eyeMat); e.position.set(x, 0.35, 1.32); e.scale.set(1.3, 0.7, 1); body.add(e); }
+  // trailing ink tendrils
+  const tendrils = [];
+  for (let i = 0; i < 6; i++) {
+    const t = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.6, 6), new THREE.MeshBasicMaterial({ color: C.shadeBody }));
+    const a = (i / 6) * Math.PI * 2; t.position.set(Math.sin(a) * 0.9, -1.4, Math.cos(a) * 0.9); t.rotation.x = Math.PI; body.add(t); tendrils.push(t);
+  }
+  const light = new THREE.PointLight(0x7a3cff, 12, 14, 1.8); light.position.y = 0.5; g.add(light);
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(1.6, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }));
+  g.add(shadow);
+  const ring = (r, color) => { const m = new THREE.Mesh(new THREE.RingGeometry(r - 0.18, r, 72).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide })); g.add(m); return m; };
+  const shockRing = ring(T.boss_shock_radius, 0xff3b5c), eclipseRing = ring(T.boss_eclipse_radius, 0x9b5cff), fillRing = ring(T.boss_shock_radius, 0xff3b5c);
+  scene.add(g);
+  return { g, body, edgeMat, core, tendrils, light, shadow, shockRing, eclipseRing, fillRing, fade: 0 };
+})();
+// expanding bursts: banish ring around Mây, ink puffs where shades were destroyed, skill shock waves
+const bursts = [];
+function burst(pos, { color = 0xffffff, from = 0.3, to = 3, life = 0.5, y = 0.8, sphere = false } = {}) {
+  const m = sphere ? new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthWrite: false }))
+    : new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+  m.position.set(pos[0], pos[1] + y, pos[2]); scene.add(m); bursts.push({ m, t: 0, from, to, life });
 }
 
 // pulse rings, wind leaves
@@ -325,7 +368,7 @@ const leafM = new THREE.Matrix4(), leafQ = new THREE.Quaternion(), leafE = new T
 
 // ---------- input ----------
 const keys = new Set();
-let camYaw = 0, mouseDown = false;
+let camYaw = 0, mouseDown = false, mouseRight = false;
 addEventListener('keydown', (e) => {
   if (rebinding) { e.preventDefault(); e.stopPropagation(); finishRebind(e.code); return; }
   if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text') return; // typing a leaderboard name
@@ -340,14 +383,67 @@ renderer.domElement.addEventListener('mousedown', (e) => {
   unlock();
   if (mode === 'playing' && document.pointerLockElement !== renderer.domElement) renderer.domElement.requestPointerLock?.();
   if (e.button === 0) mouseDown = true;
+  if (e.button === 2) mouseRight = true;
 });
-addEventListener('mouseup', () => { mouseDown = false; });
+renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+addEventListener('mouseup', (e) => { if (e.button === 2) mouseRight = false; else mouseDown = false; });
 addEventListener('mousemove', (e) => { if (document.pointerLockElement === renderer.domElement && mode === 'playing') camYaw -= e.movementX * 0.0025 * settings.sens; });
 document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && mode === 'playing' && lockedOnce) pause(); lockedOnce = !!document.pointerLockElement || lockedOnce; });
 let lockedOnce = false;
 
+// ---------- touch controls (phones / the Android app) ----------
+// Left half: floating joystick. Right half: drag to turn the camera. Buttons: jump, dash, interact, pulse, banish, pause.
+// A tap shorter than one sim tick is latched: the button stays down until a step has read it (touchAfterStep).
+const touch = { stick: null, btn: { jump: false, dash: false, interact: false, pulse: false, banish: false }, release: {} };
+const TOUCH_BTNS = [['pulse', 'Tỏa Sáng', '✺'], ['banish', 'Diệt Bóng', '⚔'], ['interact', 'Nạp đèn', '🏮'], ['dash', 'Lướt', '»'], ['jump', 'Nhảy', '⤒']];
+function setupTouch() {
+  document.body.classList.add('touch');
+  const root = document.createElement('div'); root.id = 'touch';
+  root.innerHTML = `<div id="t-stick-zone"></div><div id="t-look-zone"></div><div id="t-stick" class="hidden"><div id="t-knob"></div></div>
+    <button type="button" id="t-pause" aria-label="Tạm dừng">❚❚</button>
+    <div id="t-btns">${TOUCH_BTNS.filter(([a]) => EXTRAS || a !== 'banish').map(([a, label, ic]) => `<button type="button" class="t-btn" data-a="${a}" aria-label="${label}"><span>${ic}</span><small>${label}</small></button>`).join('')}</div>`;
+  $('hud').appendChild(root);
+  const stickEl = $('t-stick'), knob = $('t-knob'), R = 56;
+  let stickId = null, ox = 0, oy = 0, lookId = null, lx = 0;
+  const zone = $('t-stick-zone');
+  zone.addEventListener('pointerdown', (e) => {
+    if (stickId !== null) return;
+    unlock(); stickId = e.pointerId; ox = e.clientX; oy = e.clientY; zone.setPointerCapture(e.pointerId);
+    stickEl.style.left = `${ox - 70}px`; stickEl.style.top = `${oy - 70}px`; stickEl.classList.remove('hidden');
+    touch.stick = { x: 0, y: 0 }; knob.style.transform = 'translate(0px, 0px)';
+  });
+  zone.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== stickId) return;
+    let dx = e.clientX - ox, dy = e.clientY - oy; const d = Math.hypot(dx, dy);
+    if (d > R) { dx *= R / d; dy *= R / d; }
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    const dead = d < 8 ? 0 : 1; touch.stick = { x: (dx / R) * dead, y: (dy / R) * dead };
+  });
+  const stickEnd = (e) => { if (e.pointerId !== stickId) return; stickId = null; touch.stick = null; stickEl.classList.add('hidden'); };
+  zone.addEventListener('pointerup', stickEnd); zone.addEventListener('pointercancel', stickEnd);
+  const look = $('t-look-zone');
+  look.addEventListener('pointerdown', (e) => { if (lookId !== null) return; unlock(); lookId = e.pointerId; lx = e.clientX; look.setPointerCapture(e.pointerId); });
+  look.addEventListener('pointermove', (e) => { if (e.pointerId !== lookId) return; camYaw -= (e.clientX - lx) * 0.0075 * settings.sens; lx = e.clientX; });
+  const lookEnd = (e) => { if (e.pointerId === lookId) lookId = null; };
+  look.addEventListener('pointerup', lookEnd); look.addEventListener('pointercancel', lookEnd);
+  for (const b of root.querySelectorAll('.t-btn')) {
+    const a = b.dataset.a;
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); unlock(); b.setPointerCapture(e.pointerId); touch.btn[a] = true; touch.release[a] = false; b.classList.add('down'); navigator.vibrate?.(8); });
+    const up = () => { touch.release[a] = true; b.classList.remove('down'); };
+    b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+  }
+  $('t-pause').addEventListener('click', () => pause());
+  root.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+function touchAfterStep() { for (const a in touch.release) if (touch.release[a]) { touch.btn[a] = false; touch.release[a] = false; } }
+// Phones: fullscreen + landscape when a Night starts (ignored where the browser refuses, e.g. iOS Safari).
+function goFullscreen() {
+  if (!TOUCH || document.fullscreenElement) return;
+  document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
+}
+
 function readInput() {
-  if (BENCH) return { move: [0, 0], cam_yaw_deg: 0, jump: false, interact: false, pulse: false, dash: false, pause: false };
+  if (BENCH) return { move: [0, 0], cam_yaw_deg: 0, jump: false, interact: false, pulse: false, dash: false, pause: false, banish: false };
   // Contract: move = [x, z], z+ = camera forward. With yaw 0 the camera looks along +Z, so screen-right is world −X.
   const K = settings.keys, on = (a) => keys.has(K[a]);
   let x = 0, z = 0;
@@ -355,11 +451,14 @@ function readInput() {
   if (on('down')) z -= 1;
   if (on('left')) x += 1;
   if (on('right')) x -= 1;
+  const locked = document.pointerLockElement === renderer.domElement;
+  if (touch.stick) { x = -touch.stick.x; z = -touch.stick.y; } // joystick: up on screen = camera forward, right = screen right (−X at yaw 0)
   return {
     move: [x, z], cam_yaw_deg: (camYaw * 180) / Math.PI,
-    jump: on('jump'), interact: on('interact'),
-    pulse: on('pulse') || (mouseDown && document.pointerLockElement === renderer.domElement),
-    dash: on('dash'), pause: false,
+    jump: on('jump') || touch.btn.jump, interact: on('interact') || touch.btn.interact,
+    pulse: on('pulse') || (mouseDown && locked) || touch.btn.pulse,
+    dash: on('dash') || touch.btn.dash, pause: false,
+    banish: EXTRAS && (on('banish') || (mouseRight && locked) || touch.btn.banish),
   };
 }
 
@@ -383,7 +482,7 @@ function newGame(n) {
   buildWorld(n);
   const seed = params.has('seed') ? Number(params.get('seed')) : (campaign.seed + n) | 0;
   game = BENCH ? new Game({ tuning: T, seed: benchCfg.seed, night: 1, scenario: benchScenario(benchCfg.seed), bench: true })
-    : new Game({ tuning: T, seed, night: n, scenario: urlScenario, obstacles: world.userData.colliders });
+    : new Game({ tuning: T, seed, night: n, scenario: urlScenario, obstacles: world.userData.colliders, extras: EXTRAS });
   for (const L of game.lanterns) lanternViews.set(L.id, makeLantern(L));
   camYaw = Math.atan2(game.player.facing[0], game.player.facing[1]);
   if (params.has('yaw')) camYaw = (Number(params.get('yaw')) * Math.PI) / 180;
@@ -403,7 +502,7 @@ function showIntro(n) {
 function play() {
   unlock(); mode = 'playing'; show(null); $('hud').classList.remove('hidden');
   startMusic(night); last = performance.now();
-  renderer.domElement.requestPointerLock?.();
+  if (TOUCH) goFullscreen(); else renderer.domElement.requestPointerLock?.();
 }
 function pause() { if (mode !== 'playing') return; mode = 'paused'; show('scr-pause'); document.exitPointerLock?.(); stopMusic(); }
 function resume() { if (mode !== 'paused') return; play(); }
@@ -420,12 +519,14 @@ function renderSettings() {
 function applyA11y() {
   document.documentElement.classList.toggle('large', !!settings.largeText);
   document.body.classList.toggle('reduced', !!settings.reducedMotion);
-  $('key-dash').textContent = keyLabel(settings.keys.dash); $('key-pulse').textContent = keyLabel(settings.keys.pulse);
+  $('key-dash').textContent = keyLabel(settings.keys.dash); $('key-pulse').textContent = keyLabel(settings.keys.pulse); $('key-banish').textContent = keyLabel(settings.keys.banish);
+  $('cd-banish').classList.toggle('hidden', !EXTRAS);
   const K = settings.keys;
   $('controls').innerHTML = [
     [`${keyLabel(K.up)} ${keyLabel(K.left)} ${keyLabel(K.down)} ${keyLabel(K.right)}`, 'Di chuyển theo hướng camera'],
     ['Chuột · Z/C', 'Xoay camera (bấm vào màn hình để khóa chuột)'], [keyLabel(K.jump), 'Nhảy'], [keyLabel(K.dash), 'Lướt'],
-    [keyLabel(K.interact), 'Nạp ánh sáng / thắp lại / châm dầu'], [`${keyLabel(K.pulse)} · chuột trái`, 'Tỏa Sáng (tốn 3 đom đóm)'], [`${keyLabel(K.pause)} · Esc`, 'Tạm dừng'],
+    [keyLabel(K.interact), 'Nạp ánh sáng / thắp lại / châm dầu'], [`${keyLabel(K.pulse)} · chuột trái`, 'Tỏa Sáng (tốn 3 đom đóm)'],
+    ...(EXTRAS ? [[`${keyLabel(K.banish)} · chuột phải`, `Diệt Bóng: xóa Bóng Mực đang choáng trong ${T.banish_radius} m (tốn ${T.banish_cost}). Tỏa Sáng đẩy chúng lùi, nên bấm cùng lúc hoặc lướt tới`]] : []), [`${keyLabel(K.pause)} · Esc`, 'Tạm dừng'],
   ].map(([k, d]) => `<span><kbd>${k}</kbd></span><span>${d}</span>`).join('');
 }
 // ---- key rebinding ----
@@ -611,6 +712,7 @@ function onEvent(ev) {
     case 'pulse': sfx.pulse(); break;
     case 'player_hit':
       if (ev.data.by === 'fall') { sfx.fall(); message('Rơi xuống biển mây! Mất hết đom đóm.'); } else sfx.hit();
+      if (ev.data.by === 'boss_shock') message('Trúng sóng Nhật Thực!');
       if (!settings.reducedMotion) { $('flash').style.opacity = 1; setTimeout(() => ($('flash').style.opacity = 0), 250); shakeT = 0.35; }
       break;
     case 'dash': sfx.dash(); break;
@@ -619,6 +721,24 @@ function onEvent(ev) {
     case 'drifter_steal': sfx.steal(); message(`Gió Lạc cướp mất ${ev.data.amount} đom đóm! Tỏa sáng để đòi lại.`); break;
     case 'drifter_drop': sfx.pickup(); message('Gió Lạc đánh rơi đom đóm!'); break;
     case 'game_over': endNight(ev.data); break;
+    // extras (ADR 0002)
+    case 'banish': {
+      sfx.banish();
+      for (const id of ev.data.banished_ids) { const q = shadeLastPos.get(id); if (q) burst(q, { color: C.shadeEdge, from: 0.6, to: 2.4, life: 0.45, y: 0, sphere: true }); }
+      if (ev.data.banished_ids.length) { sfx.banishKill(); message(ev.data.banished_ids.length > 1 ? `Diệt ${ev.data.banished_ids.length} Bóng Mực!` : 'Diệt một Bóng Mực!'); }
+      else if (!ev.data.boss_hit) message('Diệt Bóng chỉ trúng Bóng Mực đang choáng: Tỏa Sáng trước!');
+      break;
+    }
+    case 'boss_spawned': sfx.boss(); message('Chúa Bóng Mực đã thức giấc!'); caption('⚠ Chúa Bóng Mực xuất hiện: Tỏa Sáng cho choáng rồi Diệt Bóng', 'warn', 6000); bossAlertUntil = performance.now() + 6000; break;
+    case 'boss_cast': sfx.bossCast(); caption(ev.data.skill === 'summon' ? '⚠ Chúa Bóng Mực niệm Triệu Hồi: Tỏa Sáng để ngắt!' : '⚠ Chúa Bóng Mực niệm Nhật Thực: chạy xa hoặc Tỏa Sáng để ngắt!', 'warn', 2500); break;
+    case 'boss_skill':
+      sfx.bossSkill();
+      if (game.boss) burst(game.boss.pos, ev.data.skill === 'summon' ? { color: C.shadeEdge, from: 1, to: T.boss_summon_r + 1, life: 0.6, y: -0.9 } : { color: 0xff3b5c, from: 1, to: T.boss_eclipse_radius, life: 0.8, y: -0.9 });
+      message(ev.data.skill === 'summon' ? 'Chúa Bóng Mực gọi thêm Bóng Mực!' : (ev.data.lantern_ids.length ? `Nhật Thực hút dầu đèn ${ev.data.lantern_ids.join(', ')}!` : 'Nhật Thực!'));
+      break;
+    case 'boss_stunned': if (ev.data.interrupted) { message('Đã ngắt chiêu của Chúa Bóng Mực!'); sfx.charm(); } break;
+    case 'boss_hit': sfx.bossHit(); message(`Chúa Bóng Mực trúng đòn! Còn ${ev.data.hp} máu.`); if (game.boss) burst(game.boss.pos, { color: 0xffffff, from: 1, to: 3, life: 0.4, y: 0, sphere: true }); break;
+    case 'boss_defeated': sfx.win(); message('Chúa Bóng Mực đã tan biến! +300'); caption('★ Đã đánh bại Chúa Bóng Mực', 'info', 5000); if (game.boss) burst(game.boss.pos, { color: 0xffe9b0, from: 1, to: 9, life: 1.2, y: 0, sphere: true }); break;
   }
 }
 let msgTimer = 0;
@@ -689,6 +809,7 @@ function drawMinimap() {
   }
   const sc1 = settings.colorblind ? '#00B3FF' : '#7A3CFF';
   for (const s of game.shades) dot(s.pos[0], s.pos[2], 4.5, sc1);
+  if (game.boss && game.boss.state !== 'defeated') { dot(game.boss.pos[0], game.boss.pos[2], 9, '#FF3B5C'); dot(game.boss.pos[0], game.boss.pos[2], 5, sc1); }
   for (const d of game.drifters) if (d.state !== 'removed') dot(d.pos[0], d.pos[2], 4, '#8FA3B8');
   for (const c of game.charms) if (c.available) dot(c.pos[0], c.pos[2], 4, '#C8102E');
   mctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -699,7 +820,7 @@ function drawMinimap() {
   mctx.beginPath(); mctx.moveTo(11, 0); mctx.lineTo(-7, 7); mctx.lineTo(-3, 0); mctx.lineTo(-7, -7); mctx.closePath(); mctx.fill();
   mctx.restore();
 }
-let shadeAlerts = [], shakeT = 0;
+let shadeAlerts = [], shakeT = 0, bossAlertUntil = 0;
 const lowWarned = new Set();
 // Show `el` at the screen edge pointing toward world position `pos` when it is off-screen; hide it otherwise.
 function edgeArrow(el, pos) {
@@ -727,6 +848,20 @@ function caption(text, kind = 'info', ms = 3500) {
   box.appendChild(el);
   while (box.children.length > 4) box.firstChild.remove();
   setTimeout(() => el.remove(), ms);
+}
+function updateBossHud() {
+  const B = game.boss, box = $('hud-boss');
+  const on = !!B && B.state !== 'defeated';
+  box.classList.toggle('hidden', !on); document.body.classList.toggle('boss-on', on);
+  edgeArrow($('boss-arrow'), on && (bossAlertUntil > performance.now() || B.state === 'cast') ? B.pos : null);
+  if (!on) return;
+  const sig = `${B.hp}/${B.hpMax}`;
+  if (hudCache.get('bosshp') !== sig) { hudCache.set('bosshp', sig); $('hud-boss-hp').innerHTML = Array.from({ length: B.hpMax }, (_, i) => `<i class="${i < B.hp ? '' : 'lost'}"></i>`).join(''); }
+  box.classList.toggle('stunned', B.state === 'stunned');
+  const SK = { summon: 'Triệu Hồi', eclipse: 'Nhật Thực' };
+  setText('hud-boss-cast', B.state === 'cast' ? `⚠ Đang niệm ${SK[B.castSkill]} · Tỏa Sáng để ngắt!` : B.state === 'spawning' ? 'Đang trỗi dậy…' : `Chiêu kế: ${SK[B.nextSkill]} sau ${Math.ceil(B.skillLeft / 60)} s`);
+  const w = B.state === 'cast' ? (100 * Math.max(0, 1 - B.castLeft / T.boss_cast_ticks)).toFixed(0) : '0';
+  if (hudCache.get('castbar') !== w) { hudCache.set('castbar', w); $('hud-boss-castbar').style.width = `${w}%`; }
 }
 const hudCache = new Map();
 const setText = (id, v) => { if (hudCache.get(id) !== v) { hudCache.set(id, v); $(id).textContent = v; } };
@@ -770,7 +905,16 @@ function updateHud() {
   $('cd-dash').style.setProperty('--cd', Math.min(1, dashCd).toFixed(3));
   $('cd-dash').classList.toggle('charm', p.charm > 0);
   const pulseCd = p.pulseCd / Math.round(T.pulse_cooldown_s * 60);
-  $('cd-pulse').style.setProperty('--cd', (p.carried < T.pulse_cost ? 1 : Math.min(1, pulseCd)).toFixed(3));
+  const pulseV = (p.carried < T.pulse_cost ? 1 : Math.min(1, pulseCd)).toFixed(3);
+  $('cd-pulse').style.setProperty('--cd', pulseV);
+  const banishV = (p.carried < T.banish_cost ? 1 : Math.min(1, p.banishCd / Math.round(T.banish_cooldown_s * 60))).toFixed(3);
+  if (EXTRAS) $('cd-banish').style.setProperty('--cd', banishV);
+  if (TOUCH) {
+    const tb = (a) => document.querySelector(`.t-btn[data-a="${a}"]`);
+    tb('pulse')?.style.setProperty('--cd', pulseV); tb('banish')?.style.setProperty('--cd', banishV);
+    tb('dash')?.style.setProperty('--cd', Math.min(1, dashCd).toFixed(3)); tb('dash')?.classList.toggle('charm', p.charm > 0);
+  }
+  updateBossHud();
   drawMinimap();
   $('hud-charm').classList.toggle('hidden', !(p.charm > 0));
   setText('hud-charm-s', `${Math.ceil(p.charm / 60)} s`);
@@ -781,7 +925,7 @@ function updateHud() {
     .sort((a, b) => Math.hypot(a.pos[0] - p.pos[0], a.pos[2] - p.pos[2]) - Math.hypot(b.pos[0] - p.pos[0], b.pos[2] - p.pos[2]) || a.id.localeCompare(b.id))[0];
   const pr = $('hud-prompt');
   pr.classList.toggle('hidden', !near);
-  const ik = keyLabel(settings.keys.interact);
+  const ik = TOUCH ? '🏮' : keyLabel(settings.keys.interact);
   if (near) pr.textContent = near.lit ? `${ik} — Châm dầu (${Math.round(near.fuel / 60)}/${T.fuel_max})` : `${ik} — ${near.everLit ? 'Thắp lại' : 'Nạp ánh sáng'} (${near.deposited}/${near.everLit ? T.relight_cost : T.lantern_cost})`;
 
   // arrow toward the nearest unlit lantern when it is off-screen
@@ -889,7 +1033,7 @@ function render(t, dt) {
   const seenShades = new Set(), edgeHex = shadeEdgeColor(), k2 = Math.min(1, dt * 6);
   for (const s of game.shades) {
     if (ns >= MAX_SHADES) break;
-    seenShades.add(s.id);
+    seenShades.add(s.id); shadeLastPos.set(s.id, [s.pos[0], s.pos[1] - 1, s.pos[2]]);
     const stunned = s.state === 'stunned';
     const target = (s.state === 'spawning' ? 0.3 : 1) * (stunned ? 0.85 : 1);
     const sc = (shadeAnim.get(s.id) ?? 0.01) + (target - (shadeAnim.get(s.id) ?? 0.01)) * k2;
@@ -911,6 +1055,8 @@ function render(t, dt) {
     ns++;
   }
   for (const id of shadeAnim.keys()) if (!seenShades.has(id)) shadeAnim.delete(id);
+  for (const id of shadeLastPos.keys()) if (!seenShades.has(id)) shadeLastPos.delete(id); // events of this frame already used them
+  renderBoss(t, dt);
   shadeBodies.count = shadeEdges.count = shadeShadows.count = ns; shadeEyes.count = ns * 2;
   for (const im of [shadeBodies, shadeEdges, shadeEyes, shadeShadows]) im.instanceMatrix.needsUpdate = true;
   if (ns) { shadeBodies.instanceColor.needsUpdate = true; shadeEdges.instanceColor.needsUpdate = true; }
@@ -957,7 +1103,40 @@ function render(t, dt) {
     pu.m.scale.set(s, s, s); pu.m.material.opacity = 0.9 * (1 - pu.t / 0.6);
     if (pu.t > 0.6) { scene.remove(pu.m); pulses.splice(i, 1); }
   }
+  for (let i = bursts.length - 1; i >= 0; i--) {
+    const b = bursts[i]; b.t += dt; const u = Math.min(1, b.t / b.life);
+    b.m.scale.setScalar(b.from + (b.to - b.from) * (1 - (1 - u) * (1 - u)));
+    b.m.material.opacity = 0.9 * (1 - u);
+    if (u >= 1) { scene.remove(b.m); b.m.geometry.dispose(); b.m.material.dispose(); bursts.splice(i, 1); }
+  }
   updateHud();
+}
+
+function renderBoss(t, dt) {
+  const B = game.boss, v = bossView;
+  const alive = !!B && B.state !== 'defeated';
+  v.fade += ((alive ? 1 : 0) - v.fade) * Math.min(1, dt * (alive ? 3 : 1.5));
+  v.g.visible = !!B && v.fade > 0.01;
+  if (!v.g.visible) return;
+  const p = game.player, rise = B.state === 'spawning' ? 1 - B.spawnLeft / T.boss_spawn_ticks : 1;
+  v.g.position.set(B.pos[0], B.pos[1] - 1, B.pos[2]);
+  v.body.position.y = 1.7 + Math.sin(t * 2.2) * 0.2 - (1 - rise) * 1.6;
+  v.body.rotation.y = Math.atan2(p.pos[0] - B.pos[0], p.pos[2] - B.pos[2]);
+  const stunned = B.state === 'stunned', cast = B.state === 'cast';
+  const sq = stunned ? 0.8 + Math.sin(t * 20) * 0.06 : cast ? 1 + Math.sin(t * 16) * 0.08 : 1 + Math.sin(t * 3) * 0.05;
+  v.body.scale.set(v.fade / sq, v.fade * sq * Math.max(0.2, rise), v.fade / sq);
+  v.core.material.color.setHex(stunned ? C.shadeStun : C.shadeBody);
+  v.edgeMat.color.setHex(cast ? 0xff3b5c : B.state === 'recoil' ? 0xffffff : shadeEdgeColor());
+  v.tendrils.forEach((tn, i) => { tn.rotation.z = Math.sin(t * 3 + i) * 0.35; });
+  v.light.intensity = (cast ? 30 + 15 * Math.sin(t * 16) : 12) * v.fade;
+  const k = cast ? Math.max(0, 1 - B.castLeft / T.boss_cast_ticks) : 0;
+  const showShock = cast && B.castSkill === 'eclipse';
+  v.shockRing.material.opacity = showShock ? 0.55 + 0.35 * Math.sin(t * 12) : 0;
+  v.fillRing.material.opacity = showShock ? 0.5 : 0; v.fillRing.scale.setScalar(Math.max(0.01, k));
+  v.eclipseRing.material.opacity = showShock ? 0.25 : cast ? 0.2 * (0.5 + 0.5 * Math.sin(t * 10)) : 0;
+  v.eclipseRing.scale.setScalar(cast && B.castSkill === 'summon' ? (T.boss_summon_r + 1) / T.boss_eclipse_radius : 1);
+  for (const r of [v.shockRing, v.eclipseRing, v.fillRing]) r.position.y = 0.06;
+  v.shadow.position.y = 0.05;
 }
 
 // ---------- loop ----------
@@ -988,6 +1167,8 @@ function frame(now) {
       const input = readInput();
       const wasGrounded = game.player.grounded;
       for (const ev of game.step(input)) onEvent(ev);
+      touchAfterStep();
+      if (game.lastBanish) burst(game.lastBanish.pos, { color: 0xd9c2ff, from: 0.4, to: T.banish_radius, life: 0.35 });
       if (wasGrounded && !game.player.grounded && game.player.vy > 6 && !game.player.launch) sfx.jump();
       if (game.lastPulse) spawnPulse(game.lastPulse.pos);
     }
@@ -1018,5 +1199,8 @@ applyA11y();
 renderNightCards();
 window.__showLeaderboard = showLeaderboard; window.__openSettings = () => openSettings('scr-menu'); window.__openShop = openShop;
 if (!BENCH) refreshProfile();
+if (TOUCH) setupTouch();
+// installable app (PWA): offline cache via the service worker; skipped in the bench scene, screenshot runs and the Android app (files are local there)
+if (!BENCH && !CAM && !window.Capacitor && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('/sw.js').catch(() => {});
 if (params.has('autostart') || BENCH) { show(null); mode = 'playing'; $('hud').classList.remove('hidden'); }
 requestAnimationFrame(frame);
