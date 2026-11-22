@@ -1,0 +1,22 @@
+{
+  "name": "dao-den-long-android",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Android app (Capacitor) đóng gói client 3D của Đảo Đèn Lồng — chơi offline, điều khiển cảm ứng",
+  "scripts": {
+    "copy-web": "node copy-web.js",
+    "sync": "node copy-web.js && cap sync android",
+    "apk": "node copy-web.js && cap sync android && cd android && ./gradlew assembleDebug",
+    "open": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.2",
+    "@capacitor/core": "8.6.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.2"
+  },
+  "engines": { "node": ">=22" },
+  "license": "MIT"
+}

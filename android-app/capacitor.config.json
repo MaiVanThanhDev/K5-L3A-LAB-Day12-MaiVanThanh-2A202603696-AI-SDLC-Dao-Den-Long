@@ -1,0 +1,9 @@
+{
+  "appId": "vn.daodenlong.game",
+  "appName": "Đảo Đèn Lồng",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#0E1430",
+    "allowMixedContent": false
+  }
+}
