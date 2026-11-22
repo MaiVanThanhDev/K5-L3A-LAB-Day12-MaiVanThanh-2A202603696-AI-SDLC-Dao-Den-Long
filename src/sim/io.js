@@ -1,10 +1,13 @@
 // Parsing/validation of contract input files (Test Contract v1.3; input/scenario format unchanged since v1.2). Any problem -> FormatError (headless exits 2).
+// Extras (ADR 0002): optional input button banish; optional scenario keys extras, random_boss, boss, player.banish_cd_ticks.
 import { FormatError } from './game.js';
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const isVec3 = (v) => Array.isArray(v) && v.length === 3 && v.every(isNum);
 const isNat = (v) => Number.isInteger(v) && v >= 0;
-const BUTTONS = ['jump', 'interact', 'pulse', 'dash', 'pause'];
+const BUTTONS = ['jump', 'interact', 'pulse', 'dash', 'pause', 'banish'];
+const BOSS_STATES = ['spawning', 'chase', 'cast', 'stunned', 'recoil'];
+const BOSS_SKILLS = ['summon', 'eclipse'];
 const SHADE_STATES = ['spawning', 'wander', 'chase', 'recoil', 'stunned', 'drain'];
 const DRIFTER_STATES = ['idle', 'chase', 'flee', 'removed'];
 
@@ -28,7 +31,7 @@ export function parseInputs(obj) {
 
 // Turns frames into a per-tick input source. Absent fields keep their previous value.
 export function inputStream(frames) {
-  const cur = { move: [0, 0], cam_yaw_deg: 0, jump: false, interact: false, pulse: false, dash: false, pause: false };
+  const cur = { move: [0, 0], cam_yaw_deg: 0, jump: false, interact: false, pulse: false, dash: false, pause: false, banish: false };
   let i = 0;
   return (tick) => {
     while (i < frames.length && frames[i].tick <= tick) {
@@ -52,9 +55,17 @@ export function parseScenario(obj) {
   if (player !== undefined) {
     if (!player || typeof player !== 'object' || Array.isArray(player)) throw new FormatError('scenario: player must be an object');
     if (player.pos !== undefined && !isVec3(player.pos)) throw new FormatError('scenario: player.pos must be [x,y,z]');
-    for (const k of ['carried', 'flames', 'invuln_ticks', 'dash_cd_ticks', 'pulse_cd_ticks', 'charm_ticks', 'successful_lights']) optNat(player, k, 'player');
+    for (const k of ['carried', 'flames', 'invuln_ticks', 'dash_cd_ticks', 'pulse_cd_ticks', 'charm_ticks', 'successful_lights', 'banish_cd_ticks']) optNat(player, k, 'player');
   }
-  for (const k of ['random_motes', 'random_shades', 'random_drifters', 'wind_enabled']) optBool(obj, k, '');
+  for (const k of ['random_motes', 'random_shades', 'random_drifters', 'wind_enabled', 'extras', 'random_boss']) optBool(obj, k, '');
+  if (obj.boss !== undefined) {
+    const b = obj.boss;
+    if (!b || typeof b !== 'object' || Array.isArray(b) || !isVec3(b.pos)) throw new FormatError('scenario: boss needs pos [x,y,z]');
+    if (b.state !== undefined && !BOSS_STATES.includes(b.state)) throw new FormatError(`scenario: boss state must be one of ${BOSS_STATES.join(', ')}`);
+    if (b.hp !== undefined && !(Number.isInteger(b.hp) && b.hp >= 1)) throw new FormatError('scenario: boss.hp must be an integer >= 1');
+    for (const k of ['state_ticks_left', 'skill_ticks_left']) optNat(b, k, 'boss');
+    if (b.next_skill !== undefined && !BOSS_SKILLS.includes(b.next_skill)) throw new FormatError(`scenario: boss next_skill must be one of ${BOSS_SKILLS.join(', ')}`);
+  }
   if (motes !== undefined) {
     for (const m of arr(motes, 'motes')) {
       if (isVec3(m)) continue;

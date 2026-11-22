@@ -3,6 +3,8 @@
 // Numbers: game.contract.json (Ticket-02 standard values). Maps: ./maps.js. Assumptions: docs/notes/assumptions.md.
 // The 12 phases of step() follow the mandatory per-tick order of Ticket-02 (+ Ticket-03: fuel in phase 2, lantern_out right after).
 // Lantern fuel is kept in integer units of 1/60 (FU) — decay 1 FU/tick, drain 5 FU/tick — and only rounded on output.
+// Extras (ADR 0002, off unless the client passes extras:true or a scenario sets "extras": true): the Diệt Bóng skill
+// (button banish) and the boss Chúa Bóng Mực. With extras off nothing below reads them, so contract output is unchanged.
 import { mulberry32 } from './rng.js';
 import { NIGHTS, SHADE_HOVER, TOWER, padVelocity, r3 } from './maps.js';
 
@@ -24,7 +26,8 @@ const distXZ = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
 const dist3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 const idNum = (id) => { const m = /(\d+)$/.exec(id); return m ? Number(m[1]) : 0; };
 const byId = (a, b) => idNum(a.id) - idNum(b.id) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-const BUTTONS = ['jump', 'interact', 'pulse', 'dash', 'pause'];
+const BUTTONS = ['jump', 'interact', 'pulse', 'dash', 'pause', 'banish'];
+const BOSS_SKILLS = ['summon', 'eclipse'];
 const FU = TICK_HZ; // fuel units per 1.0 fuel
 const r1 = (x) => { const v = Math.round(x * 10) / 10; return v === 0 ? 0 : v; };
 
@@ -35,7 +38,7 @@ export class Game {
   // fuel burn/drain or end of night; shades still move by the normal wander rules.
   // obstacles = [{x, z, r, h}] (client only: decorative rocks/trees). The headless contract never passes any,
   // so contract output is unchanged; the player is pushed out of them and can jump over ones lower than its feet.
-  constructor({ tuning, seed = 0, scenario = null, night = 1, bench = false, obstacles = [] }) {
+  constructor({ tuning, seed = 0, scenario = null, night = 1, bench = false, obstacles = [], extras = false }) {
     const t = (this.t = tuning);
     const map = (this.map = NIGHTS[night]);
     if (!map) throw new FormatError(`night ${night} does not exist`);
@@ -58,11 +61,14 @@ export class Game {
     this.randomShades = sc.random_shades !== false;
     this.randomDrifters = map.drifters && sc.random_drifters !== false;
     this.windEnabled = map.wind && sc.wind_enabled !== false;
+    this.extras = !this.bench && (!!extras || sc.extras === true);
+    this.boss = null;
+    this.bossTimed = this.extras && sc.random_boss !== false && !sc.boss;
 
     this.player = {
       pos: [...map.start], vel: [0, 0, 0], vy: 0, grounded: true, facing: [...map.facing],
       flames: t.flames, carried: 0, invuln: 0, pulseCd: 0, dashCd: 0, dashLeft: 0, dashDir: null,
-      charm: 0, launch: null, fallWait: 0, successfulLights: 0,
+      charm: 0, launch: null, fallWait: 0, successfulLights: 0, banishCd: 0,
     };
     this.fuelMax = t.fuel_max * FU;
     this.lowFuel = t.low_fuel_threshold * FU;
@@ -125,6 +131,7 @@ export class Game {
       if (sp.pulse_cd_ticks != null) p.pulseCd = sp.pulse_cd_ticks;
       if (sp.charm_ticks != null) p.charm = sp.charm_ticks;
       if (sp.successful_lights != null) p.successfulLights = sp.successful_lights;
+      if (sp.banish_cd_ticks != null) p.banishCd = sp.banish_cd_ticks;
       const g = this.groundAt(p.pos[0], p.pos[2]);
       p.grounded = g !== null && g !== TOWER && Math.abs(p.pos[1] - g) < 1e-6;
     }
@@ -145,6 +152,19 @@ export class Game {
       }
     }
     for (const s of this.shades) if (s.targetId && !this.lanterns.some((L) => L.id === s.targetId)) throw new FormatError(`scenario: unknown target_lantern_id ${s.targetId}`);
+    if (this.extras && sc.boss) {
+      const b = sc.boss, B = this.addBoss([...b.pos], b.state || 'chase');
+      if (b.hp != null) { B.hp = b.hp; B.hpMax = Math.max(B.hpMax, b.hp); }
+      if (b.state_ticks_left != null) {
+        if (B.state === 'spawning') B.spawnLeft = b.state_ticks_left;
+        else if (B.state === 'stunned') B.stun = b.state_ticks_left;
+        else if (B.state === 'recoil') B.recoilLeft = b.state_ticks_left;
+        else if (B.state === 'cast') B.castLeft = b.state_ticks_left;
+      }
+      if (b.skill_ticks_left != null) B.skillLeft = b.skill_ticks_left;
+      if (b.next_skill != null) B.nextSkill = b.next_skill;
+      if (B.state === 'cast') B.castSkill = B.nextSkill;
+    }
     if (sc.time_left_s != null) this.timeLeft0 = sc.time_left_s;
     this.dawnTick = ticks(this.timeLeft0);
   }
@@ -182,6 +202,19 @@ export class Game {
     if (state === 'recoil') s.recoilLeft = this.t.shade_recoil_ticks;
     this.shades.push(s);
     return s;
+  }
+
+  // Boss (extras): HP = boss_hp_base + night. States: spawning → chase ⇄ cast (telegraphed skill), stunned, recoil, defeated.
+  addBoss(pos, state = 'spawning') {
+    const t = this.t, hp = t.boss_hp_base + this.night;
+    const b = { id: 'B1', pos, hp, hpMax: hp, state, spawnLeft: 0, stun: 0, recoilLeft: 0, castLeft: 0, castSkill: null,
+      skillLeft: ticks(t.boss_skill_every_s), nextSkill: BOSS_SKILLS[0] };
+    if (state === 'spawning') b.spawnLeft = t.boss_spawn_ticks;
+    if (state === 'stunned') b.stun = ticks(t.boss_stun_s);
+    if (state === 'recoil') b.recoilLeft = t.boss_recoil_ticks;
+    if (state === 'cast') b.castLeft = t.boss_cast_ticks;
+    this.boss = b;
+    return b;
   }
 
   addDrifter(pos, id = null, state = 'idle') {
@@ -256,6 +289,7 @@ export class Game {
   step(input) {
     this.events = [];
     this.lastPulse = null;
+    this.lastBanish = null;
     if (this.state !== 'playing') return this.events;
     const pressed = (k) => !!input[k] && !this.prev[k];
     const end = () => {
@@ -285,6 +319,19 @@ export class Game {
       if (s.state === 'spawning' && --s.spawnLeft <= 0) { s.spawnLeft = 0; s.state = 'wander'; }
     }
     if (p.charm > 0) p.charm -= 1;
+    const B = this.boss && this.boss.state !== 'defeated' ? this.boss : null;
+    if (this.extras) {
+      if (p.banishCd > 0) p.banishCd -= 1;
+      if (B) {
+        if (B.state === 'spawning' && --B.spawnLeft <= 0) { B.spawnLeft = 0; B.state = 'chase'; }
+        if (B.state === 'stunned' && --B.stun <= 0) { B.stun = 0; B.state = 'chase'; }
+        if ((B.state === 'chase' || B.state === 'recoil') && B.skillLeft > 0) B.skillLeft -= 1;
+        if (B.state === 'chase' && B.skillLeft === 0) { // telegraph: stands still for boss_cast_ticks, then the skill fires
+          B.state = 'cast'; B.castSkill = B.nextSkill; B.castLeft = t.boss_cast_ticks;
+          this.emit('boss_cast', { boss_id: B.id, skill: B.castSkill, cast_s: r3(B.castLeft / TICK_HZ) });
+        }
+      }
+    }
     for (let i = this.motes.length - 1; i >= 0; i--) {
       const m = this.motes[i];
       if (m.kind === 'dropped' && --m.ttl <= 0) this.motes.splice(i, 1);
@@ -452,17 +499,18 @@ export class Game {
     // 6. safe zones: shades inside a just-lit zone are expelled to the edge within 30 ticks (harmless meanwhile)
     //    The edge point is fixed when the push starts (expelTarget): never over the sea of clouds or inside the tower.
     const R = t.safe_radius;
+    const movers = B ? [...this.shades, B] : this.shades; // extras: the boss is pushed out like a shade
     for (const L of newlyLit) {
-      for (const s of this.shades) if (distXZ(s.pos, L.pos) < R) s.expel = { to: this.expelTarget(s, L.pos), left: t.safe_expel_ticks };
+      for (const s of movers) if (distXZ(s.pos, L.pos) < R) s.expel = { to: this.expelTarget(s, L.pos), left: t.safe_expel_ticks };
     }
     // a shade found inside a lit zone any other way (e.g. placed there by a scenario) is expelled the same way
-    for (const s of this.shades) {
+    for (const s of movers) {
       if (s.expel) continue;
       const L = this.lanterns.find((l) => this.hasZone(l) && distXZ(s.pos, l.pos) < R - 1e-9);
       if (L) s.expel = { to: this.expelTarget(s, L.pos), left: t.safe_expel_ticks };
     }
-    for (const s of this.shades) if (s.expel && s.state === 'drain') { s.state = 'wander'; s.drainId = null; }
-    for (const s of this.shades) {
+    for (const s of movers) if (s.expel && s.state === 'drain') { s.state = 'wander'; s.drainId = null; }
+    for (const s of movers) {
       if (!s.expel) continue;
       const e = s.expel, k = 1 / e.left; // straight line, arrives exactly on the last push tick
       s.pos[0] += (e.to[0] - s.pos[0]) * k; s.pos[2] += (e.to[1] - s.pos[2]) * k;
@@ -491,6 +539,14 @@ export class Game {
       }
       this.lastPulse = { pos: [...p.pos] };
       this.emit('pulse', { stunned_ids: ids });
+      if (B && B.state !== 'spawning' && dist3(c, B.pos) <= t.pulse_radius) {
+        const interrupted = B.state === 'cast';
+        if (interrupted) { B.skillLeft = ticks(t.boss_skill_every_s); B.castLeft = 0; } // the skill is lost; next one a full cycle later
+        B.state = 'stunned'; B.stun = ticks(t.boss_stun_s); B.recoilLeft = 0;
+        this.score += sc.per_stun;
+        this.emit('boss_stunned', { boss_id: B.id, interrupted, skill: interrupted ? B.castSkill : null });
+        if (interrupted) B.castSkill = null;
+      }
       for (const d of this.drifters) {
         if (d.state === 'removed' || dist3(c, d.pos) > t.pulse_radius) continue;
         if (d.state === 'chase') { d.state = 'flee'; d.fleeLeft = t.drifter_flee_ticks; }
@@ -506,6 +562,36 @@ export class Game {
           this.emit('drifter_drop', { drifter_id: d.id, amount });
         }
       }
+    }
+
+    // 7b. Diệt Bóng (extras): destroys every STUNNED shade within banish_radius (same centre as the pulse);
+    //     a stunned boss within boss_reach_m loses 1 HP (0 → defeated). Costs banish_cost motes even with no target.
+    if (this.extras && active && pressed('banish') && p.banishCd === 0 && p.carried >= t.banish_cost) {
+      const es = t.extras_score;
+      p.carried -= t.banish_cost;
+      p.banishCd = ticks(t.banish_cooldown_s);
+      const c = [p.pos[0], p.pos[1] + t.pulse_center_height, p.pos[2]];
+      const ids = [];
+      for (let i = this.shades.length - 1; i >= 0; i--) {
+        const s = this.shades[i];
+        if (s.state !== 'stunned' || s.expel || dist3(c, s.pos) > t.banish_radius) continue;
+        ids.unshift(s.id);
+        this.shades.splice(i, 1);
+      }
+      this.score += es.per_banish * ids.length;
+      let bossHit = false;
+      if (B && B.state === 'stunned' && dist3(c, B.pos) <= t.boss_reach_m) {
+        bossHit = true;
+        B.hp -= 1;
+        this.score += es.per_boss_hit;
+        if (B.hp <= 0) {
+          B.hp = 0; B.state = 'defeated'; B.stun = 0;
+          this.score += es.per_boss_defeat;
+        } else { B.state = 'recoil'; B.stun = 0; B.recoilLeft = t.boss_recoil_ticks; }
+      }
+      this.lastBanish = { pos: [...p.pos] };
+      this.emit('banish', { banished_ids: ids, boss_hit: bossHit });
+      if (bossHit) this.emit(B.state === 'defeated' ? 'boss_defeated' : 'boss_hit', { boss_id: B.id, hp: B.hp });
     }
 
     // 8. move shades and drifters
@@ -552,6 +638,7 @@ export class Game {
         if (this.moveShade(s, s.heading[0] * WANDER_SPEED * DT, s.heading[1] * WANDER_SPEED * DT, false)) s.turn = 0;
       }
     }
+    if (B && B.state !== 'defeated') this.moveBoss(B, targetable);
     for (const d of this.drifters) {
       if (d.state === 'removed') continue;
       const dist = distXZ(d.pos, p.pos);
@@ -611,6 +698,11 @@ export class Game {
           break;
         }
       }
+      if (B && !B.expel && p.invuln === 0 && (B.state === 'chase' || B.state === 'cast') && distXZ(B.pos, p.pos) <= t.boss_hit_radius
+        && Math.abs(p.pos[1] - (B.pos[1] - SHADE_HOVER)) <= t.boss_hit_height) {
+        this.hitPlayer('boss');
+        if (B.state === 'chase') { B.state = 'recoil'; B.recoilLeft = t.boss_recoil_ticks; }
+      }
     }
 
     // 10. scheduled spawns (new entities interact from the next tick)
@@ -636,6 +728,17 @@ export class Game {
       this.addDrifter([q[0], (this.ground(q[0], q[2]) ?? 0) + DRIFTER_HOVER, q[2]]);
     }
 
+    if (this.bossTimed && !this.boss && st === ticks(t.boss_spawn_s)) {
+      // farthest spawn point from Mây outside safe zones; ties (within 1e-6 m) → first in map order
+      let q = null, qd = -1;
+      for (const pt of map.shadePoints) {
+        if (this.insideSafe(pt[0], pt[2])) continue;
+        const d = distXZ(pt, p.pos);
+        if (d > qd + 1e-6) { q = pt; qd = d; }
+      }
+      if (q) { const b = this.addBoss([...q], 'spawning'); this.emit('boss_spawned', { boss_id: b.id, hp: b.hp }); }
+    }
+
     // 11. win / lose after every update of the tick: no flames always loses first; at dawn win if lit >= ceil(0.6 x total)
     if (this.bench) { /* benchmark scene never ends */ } else if (p.flames <= 0) this.finish('lost', 'no_flames');
     else if (st >= this.dawnTick) {
@@ -649,6 +752,81 @@ export class Game {
 
     // 12. snapshot is written by the caller
     return end();
+  }
+
+  // Mây takes one hit (same rules as a shade touch): −1 flame, drops half the motes carried, becomes invulnerable.
+  hitPlayer(by) {
+    const t = this.t, p = this.player;
+    p.flames -= 1;
+    const dropped = Math.floor(p.carried * t.hit_drop_ratio);
+    p.carried -= dropped;
+    for (let i = 0; i < dropped; i++) this.dropMoteNear(p.pos);
+    p.invuln = ticks(t.invuln_s);
+    this.emit('player_hit', { by, flames: p.flames, dropped });
+  }
+
+  // Boss movement (extras), phase 8. Uses the shade mover: cannot enter safe zones, leave the island or climb walls.
+  moveBoss(B, targetable) {
+    const t = this.t, p = this.player;
+    if (B.expel || B.state === 'spawning' || B.state === 'stunned') return;
+    if (B.state === 'recoil') {
+      let ux = B.pos[0] - p.pos[0], uz = B.pos[2] - p.pos[2];
+      const n = Math.hypot(ux, uz);
+      if (n < 1e-9) { ux = 1; uz = 0; } else { ux /= n; uz /= n; }
+      const k = t.shade_recoil_m / t.boss_recoil_ticks;
+      this.moveShade(B, ux * k, uz * k);
+      if (--B.recoilLeft <= 0) { B.recoilLeft = 0; B.state = 'chase'; }
+      return;
+    }
+    if (B.state === 'cast') {
+      if (--B.castLeft > 0) return;
+      this.bossSkill(B, B.castSkill);
+      B.state = 'chase'; B.castSkill = null;
+      B.skillLeft = ticks(t.boss_skill_every_s);
+      B.nextSkill = BOSS_SKILLS[(BOSS_SKILLS.indexOf(B.nextSkill) + 1) % BOSS_SKILLS.length];
+      return;
+    }
+    // chase Mây when targetable and within boss_detect_m, else drift toward the nearest lit lantern (to eclipse it)
+    let goal = null;
+    if (targetable && distXZ(B.pos, p.pos) <= t.boss_detect_m) goal = p.pos;
+    else {
+      let bd = Infinity;
+      for (const L of this.lanterns) { if (!L.lit) continue; const d = distXZ(B.pos, L.pos); if (d < bd) { bd = d; goal = L.pos; } }
+    }
+    if (!goal) return;
+    const d = distXZ(B.pos, goal);
+    if (d > 1e-9) { const k = Math.min(d, t.boss_speed * DT) / d; this.moveShade(B, (goal[0] - B.pos[0]) * k, (goal[2] - B.pos[2]) * k); }
+  }
+
+  // summon: boss_summon_count shades (state spawning) on a circle of boss_summon_r around the boss at angles k·360°/count,
+  //   skipping spots over the cloud sea, in the tower or in a safe zone; capped at shadeMax + boss_summon_cap_extra shades.
+  // eclipse: every lit lantern within boss_eclipse_radius loses boss_eclipse_fuel (may go out right away); Mây within
+  //   boss_shock_radius is hit unless invulnerable.
+  bossSkill(B, skill) {
+    const t = this.t, p = this.player;
+    if (skill === 'summon') {
+      const ids = [], n = t.boss_summon_count;
+      for (let k = 0; k < n; k++) {
+        if (this.shades.length >= this.map.shadeMax + t.boss_summon_cap_extra) break;
+        const a = (2 * Math.PI * k) / n, x = r3(B.pos[0] + t.boss_summon_r * Math.cos(a)), z = r3(B.pos[2] + t.boss_summon_r * Math.sin(a));
+        const g = this.ground(x, z);
+        if (g === null || g === TOWER || this.insideSafe(x, z)) continue;
+        ids.push(this.addShade([x, g + SHADE_HOVER, z], null, 'spawning').id);
+      }
+      this.emit('boss_skill', { boss_id: B.id, skill, spawned_ids: ids });
+    } else {
+      const dimmed = [];
+      for (const L of this.lanterns) {
+        if (!L.lit || distXZ(B.pos, L.pos) > t.boss_eclipse_radius) continue;
+        L.fuel -= t.boss_eclipse_fuel * FU;
+        dimmed.push(L.id);
+      }
+      this.emit('boss_skill', { boss_id: B.id, skill, lantern_ids: dimmed });
+      for (const L of this.lanterns) {
+        if (L.lit && L.fuel <= 0) { L.lit = false; L.fuel = 0; L.deposited = 0; this.emit('lantern_out', { lantern_id: L.id }); }
+      }
+      if (p.fallWait === 0 && p.invuln === 0 && distXZ(B.pos, p.pos) <= t.boss_shock_radius) this.hitPlayer('boss_shock');
+    }
   }
 
   // Where a shade inside a lantern zone (centre c) is pushed to: the zone edge straight away from the lantern, as before,
@@ -737,6 +915,17 @@ export class Game {
       motes: this.motes.map((m) => ({ id: m.id, pos: r3v(m.pos), kind: m.kind, ttl_s: m.kind === 'dropped' ? r3(m.ttl / TICK_HZ) : null })),
       drifters: this.drifters.map((d) => ({ id: d.id, pos: r3v(d.pos), state: d.state, stolen: d.stolen })),
       charms: this.charms.map((c) => ({ id: c.id, pos: r3v(c.pos), available: c.available, respawn_s: r3(c.respawn / TICK_HZ) })),
+      ...(this.extras ? this.extrasSnapshot() : {}),
+    };
+  }
+
+  // Extra snapshot fields, only when extras are on (contract snapshots keep their v1.3 shape).
+  extrasSnapshot() {
+    const p = this.player, B = this.boss;
+    return {
+      banish_cd_s: r3(p.banishCd / TICK_HZ),
+      boss: B ? { id: B.id, pos: r3v(B.pos), state: B.state, hp: B.hp, hp_max: B.hpMax, skill: B.state === 'cast' ? B.castSkill : null,
+        next_skill: B.nextSkill, skill_in_s: r3(B.skillLeft / TICK_HZ), cast_left_s: r3(B.castLeft / TICK_HZ) } : null,
     };
   }
 }

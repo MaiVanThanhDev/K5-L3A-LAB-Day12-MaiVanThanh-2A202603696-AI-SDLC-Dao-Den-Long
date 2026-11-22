@@ -80,6 +80,27 @@
     "drain_range_m": 2,
     "drain_break_m": 6,
     "fuel_drain_event_ticks": 60,
+    "banish_cost": 2,
+    "banish_radius": 3,
+    "banish_cooldown_s": 1,
+    "boss_spawn_s": 60,
+    "boss_spawn_ticks": 60,
+    "boss_hp_base": 2,
+    "boss_speed": 3.2,
+    "boss_detect_m": 30,
+    "boss_hit_radius": 1.6,
+    "boss_hit_height": 2,
+    "boss_reach_m": 4,
+    "boss_stun_s": 1.5,
+    "boss_recoil_ticks": 60,
+    "boss_skill_every_s": 12,
+    "boss_cast_ticks": 90,
+    "boss_summon_count": 2,
+    "boss_summon_r": 2.5,
+    "boss_summon_cap_extra": 4,
+    "boss_eclipse_radius": 14,
+    "boss_eclipse_fuel": 25,
+    "boss_shock_radius": 5,
     "score": {
       "per_mote": 5,
       "per_lantern": 100,
@@ -89,6 +110,11 @@
       "per_lit_at_dawn": 50,
       "per_flame_left": 50,
       "per_second_left": 0
+    },
+    "extras_score": {
+      "per_banish": 20,
+      "per_boss_hit": 50,
+      "per_boss_defeat": 300
     }
   }
 }
