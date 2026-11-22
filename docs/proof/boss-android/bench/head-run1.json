@@ -1,0 +1,29 @@
+{
+  "contract_version": "1.3",
+  "avg_fps": 114.9,
+  "p1_low_fps": 29.9,
+  "frame_ms_p95": 14.8,
+  "frames": 3448,
+  "load_ms": 3261,
+  "peak_mem_mb": 764,
+  "vsync_off": true,
+  "renderer": "three.js r160 (WebGL) in Chrome/157.0.8103.79 · ANGLE (Intel, Intel(R) UHD Graphics 620 (0x00003EA0) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "os": "Windows_NT 10.0.19045 x64 · Intel(R) Core(TM) i5-8265U CPU @ 1.60GHz · 8 GB RAM",
+  "seed": 42,
+  "duration_s": 30,
+  "warmup_s": 3,
+  "viewport": "1280x720",
+  "pixel_ratio": 1.0000000149011612,
+  "headless": false,
+  "scene": {
+    "night": 1,
+    "shades": 200,
+    "motes": 100,
+    "lit": [
+      "L1",
+      "L2",
+      "L3"
+    ]
+  },
+  "notes": "vsync off via --disable-gpu-vsync --disable-frame-rate-limit; peak_mem_mb = RSS (working set on Windows) of the whole Chrome process tree, sampled every 5 s while measuring; load_ms = bench process start → first rendered frame of the bench scene."
+}

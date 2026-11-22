@@ -43,6 +43,26 @@ DATABASE_URL=postgres://ddl:ddl@localhost:5433/ddl npm start
 - Test cửa hàng trên PostgreSQL thật: `SHOP_TEST_DATABASE_URL=postgres://ddl:ddl@localhost:5433/ddl npm test`.
 - API: `GET /api/shop/profile?name=` · `POST /api/shop/earn {name, run_id, score}` · `POST /api/shop/buy {name, item}` · `POST /api/shop/equip {name, item}`.
 
+### Chơi trên điện thoại Android (nhánh `feature/boss-android`)
+
+Màn hình cảm ứng tự bật điều khiển cảm ứng: **joystick** ở nửa trái, **kéo** nửa phải để xoay camera, các nút **Nạp đèn · Diệt Bóng · Tỏa Sáng · Lướt · Nhảy**, nút ❚❚ để tạm dừng. Có ba cách chơi:
+
+1. **Trình duyệt trên điện thoại, cùng Wi-Fi:** `npm start` in ra địa chỉ LAN (ví dụ `http://192.168.1.25:5173`). Mở địa chỉ đó bằng Chrome trên điện thoại. Nếu Windows hỏi tường lửa cho Node.js, chọn "Cho phép" với mạng riêng.
+2. **Cài như ứng dụng (PWA):** game có manifest và service worker (chơi offline). Mở bằng Chrome Android qua **HTTPS** (hoặc `localhost`), rồi chọn menu ⋮ → **Cài đặt ứng dụng**. Qua `http://<IP LAN>` thì chỉ chơi được trong trình duyệt, không cài được.
+3. **App APK (Capacitor, chạy offline, không cần server):** project ở [android-app/](android-app/).
+   - **Không cần cài gì:** đẩy code lên GitHub, vào tab **Actions → android-apk** (hoặc bấm "Run workflow"), tải artifact `dao-den-long-apk` về, rồi cài `app-debug.apk` lên máy (cho phép "cài ứng dụng không rõ nguồn gốc").
+   - **Build trên máy** (cần Android Studio hoặc Android SDK và JDK 21):
+
+     ```bash
+     npm install                     # ở gốc repo (three.js)
+     cd android-app && npm install
+     npm run apk                     # chép game vào www/, cap sync, gradlew assembleDebug
+     # → android-app/android/app/build/outputs/apk/debug/app-debug.apk
+     npm run open                    # hoặc mở bằng Android Studio để chạy trên máy ảo / điện thoại
+     ```
+
+   Trong app, bảng xếp hạng và cửa hàng lưu trên máy (không có server).
+
 ## Điều khiển (đổi được trong Cài đặt)
 
 | Phím mặc định | Hành động |
@@ -53,6 +73,7 @@ DATABASE_URL=postgres://ddl:ddl@localhost:5433/ddl npm start
 | `Shift` | Lướt (14 m/s trong 0.2 s, hồi 1.5 s) |
 | `E` | Nạp ánh sáng / thắp lại / châm dầu ở đèn gần nhất (trong 2 m) |
 | `Q` / chuột trái | Tỏa Sáng: tốn 3 đom đóm, choáng và đẩy lùi Bóng Mực trong 5 m |
+| `F` / chuột phải | **Diệt Bóng**: tốn 2 đom đóm, xóa Bóng Mực **đang choáng** trong 3 m (hồi 1 s). Tỏa Sáng đẩy chúng lùi 4 m, nên bấm `Q`+`F` cùng lúc hoặc lướt tới rồi bấm `F`. Cũng là cách duy nhất làm Chúa Bóng Mực mất máu. |
 | `P` / `Esc` | Tạm dừng: Tiếp tục / Chơi lại Đêm / Cài đặt / Về menu |
 | `F3` | Hiện FPS |
 
@@ -66,6 +87,11 @@ DATABASE_URL=postgres://ddl:ddl@localhost:5433/ddl npm start
 - **Đèn yếu (< 30 dầu)** mất vùng an toàn 6 m. Bóng Mực tìm tới và hút 5 dầu/giây. Tỏa Sáng hoặc châm dầu lên ≥ 30 để đuổi chúng.
 - **Sức chứa** 10, tăng 2 mỗi lần thắp thành công, tối đa 20. Bị Bóng Mực chạm: −1 lửa, rơi nửa số đom đóm. Rơi khỏi đảo: −1 lửa, mất hết đom đóm.
 - **Gió Lạc** (Đêm 2, 3) cướp 3 đom đóm khi bạn mang ≥ 5. **Bùa Gió**: 10 s chạy 7.2 m/s, lướt không hồi. **Gió mạnh** (Đêm 3) mỗi 30 s.
+- **Chúa Bóng Mực** (boss, nhánh `feature/boss-android`): trỗi dậy ở giây 60 mỗi Đêm, 3/4/5 máu. Nó đuổi theo Mây và không vào được vùng đèn sáng. Mỗi 12 s nó niệm một chiêu trong 1.5 s (vòng đỏ trên đất, thanh niệm trên HUD):
+  - **Triệu Hồi** gọi thêm 2 Bóng Mực;
+  - **Nhật Thực** hút 25 dầu của mọi đèn trong 14 m và đánh Mây nếu đứng trong 5 m.
+
+  Bấm **Tỏa Sáng** trúng nó lúc đang niệm để **ngắt chiêu**. Làm nó choáng rồi **Diệt Bóng** để trừ 1 máu. Chơi đúng luật v1.0.0 (không Diệt Bóng, không boss): thêm `?noextras` vào URL.
 
 | Sự kiện | Điểm |
 |---|---|
@@ -73,6 +99,7 @@ DATABASE_URL=postgres://ddl:ddl@localhost:5433/ddl npm start
 | Thắp lần đầu / thắp lại | +100 / +40 |
 | Mỗi Bóng Mực trúng Tỏa Sáng | +5 (tổng +15 nếu nó đang hút dầu) |
 | Bình minh (khi thắng): mỗi đèn đang sáng · mỗi Ngọn Lửa | +50 + floor(dầu) · +50 |
+| Diệt một Bóng Mực · boss trúng đòn · hạ boss (chỉ khi bật extras) | +20 · +50 · +300 |
 
 Tổng điểm = tổng điểm các Đêm đã thắng. Sau màn **Bình Minh** (thắng Đêm 3) hoặc khi thua, nhập tên (3–12 ký tự, chữ có dấu được) để lưu vào **Bảng xếp hạng** top 10 (menu chính). Mọi con số: [game.contract.json](game.contract.json).
 
@@ -101,10 +128,11 @@ Ghi chú bench: vsync tắt bằng `--disable-gpu-vsync --disable-frame-rate-lim
 game.contract.json  Test Contract v1.3 (tuning, headless_cmd, bench_cmd, soak_cmd)
 src/sim/            luật game tất định (game.js), bản đồ (maps.js), cảnh bench (bench.js), IO contract
 src/headless.js     CLI headless · src/leaderboard*.js  bảng xếp hạng (lưu data/leaderboard.json)
-server.js           server tĩnh + API bảng xếp hạng + --export-leaderboard
-web/                client Three.js: render, HUD, menu, âm thanh WebAudio, cài đặt — không chứa luật
+server.js           server tĩnh + API bảng xếp hạng/cửa hàng + --export-leaderboard; phục vụ /sw.js, /manifest.webmanifest (PWA)
+web/                client Three.js: render, HUD, menu, âm thanh WebAudio, cài đặt, điều khiển cảm ứng, PWA — không chứa luật
+android-app/        app Android (Capacitor): copy-web.js chép client vào www/, project Gradle ở android/
 scripts/            bench, soak, proof, bot, ảnh chụp và đo FPS qua Chrome DevTools protocol
-tests/              69 case + scenario
+tests/              case Phase 1–4, cửa hàng, extras (Diệt Bóng + boss) + scenario
 docs/spec/ docs/adr/ docs/notes/ docs/proof/   spec + tiêu chí nghiệm thu, ADR, giả định + nhật ký AI + retro, bằng chứng từng phase
 docs/lab/           đề bài và quy định của lab
 AGENTS.md, CLAUDE.md, .claude/    harness AI (hook chặn khi test đỏ, skill verify)

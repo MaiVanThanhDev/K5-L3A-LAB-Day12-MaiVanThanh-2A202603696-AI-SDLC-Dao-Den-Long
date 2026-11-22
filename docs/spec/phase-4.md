@@ -38,3 +38,10 @@ Yêu cầu phi chức năng và phát hành. Mỗi mục có số đo hoặc che
 | X-3 | Mỗi Đêm chơi xong nhận xu = điểm Đêm đó, mỗi Đêm một lần (D18, D19). | SH2, SH4; ảnh result-xu |
 | X-4 | Cửa hàng 4 ô: mua trừ đúng giá, không đủ xu / đã có / chưa mua mà mặc → lỗi; mặc đồ đổi ngoại hình Mây. | SH1, SH3; ảnh shop, shop-tryon |
 | X-5 | Lưu PostgreSQL qua `docker compose`; mua song song không làm số dư âm; không có DB thì lưu file (D20). | SH4 (file, bật lại server), SH5 (PostgreSQL) |
+| **9. Sau v1.0.0 (nhánh feature/boss-android, ADR 0002)** | | |
+| X-6 | Không có `extras` thì đầu ra headless giống hệt v1.3 (nút banish bị bỏ qua, snapshot không thêm trường, không có boss) (D22). | X1; `cmp` ba Đêm trước/sau |
+| X-7 | Diệt Bóng xóa Bóng Mực đang choáng trong 3 m, tốn 2 đom đóm, +20 mỗi con, hồi 1 s; bấm hụt vẫn tốn (D23). | X2, X3 |
+| X-8 | Boss xuất hiện ở giây 60 tại điểm sinh xa Mây nhất, HP = 2 + Đêm; Tỏa Sáng làm choáng, Diệt Bóng trừ HP, HP 0 → defeated (+300); chạm Mây → −1 lửa (D25). | X4, X5, X9, X10 |
+| X-9 | Skill boss báo trước 1.5 s: Triệu Hồi gọi 2 Bóng Mực, Nhật Thực hút 25 dầu của đèn trong 14 m và đánh Mây trong 5 m; Tỏa Sáng ngắt được (D26). | X6, X7, X8 |
+| X-10 | Scenario/inputs mới sai định dạng → mã thoát 2; chạy hai lần cùng seed với extras cho kết quả giống hệt. | X11, X12 |
+| X-11 | Chơi trên Android: điều khiển cảm ứng (joystick, kéo camera, 5 nút), PWA cài được, app Capacitor chạy offline, APK build trên CI (D29). | ảnh touch-phone, touch-play (bản `android-app/www` không server); kiểm tra chạm thật qua CDP; workflow android.yml |

@@ -2,6 +2,30 @@
 
 Ghi theo phase (tag git). Mục **BREAKING** liệt kê thay đổi phá vỡ tương thích với contract, scenario, output headless hoặc test của phase trước.
 
+## [Unreleased] — nhánh `feature/boss-android` (tách từ `feature/shop-scenery`, không thuộc bài nộp)
+
+Quyết định: [ADR 0002](docs/adr/0002-banish-skill-and-shade-boss.md) · giả định D22–D29 · spec X-6…X-11.
+
+### Không BREAKING với contract
+
+Mọi luật mới nằm sau cờ `extras`: client bật khi chơi, headless chỉ bật khi scenario có `"extras": true`. Khi cờ tắt, đầu ra headless giống hệt v1.3 từng byte (case X1; `cmp` ba Đêm × 3000 tick trước và sau khi đổi). 76 case cũ không đổi. Bảng `score` chuẩn giữ nguyên; điểm mới nằm ở `extras_score`.
+
+### Thêm
+
+- **Diệt Bóng** (nút `banish`; phím `F`, chuột phải, nút cảm ứng ⚔): xóa mọi Bóng Mực đang choáng trong 3 m. Tốn 2 đom đóm, hồi 1 s, +20 điểm mỗi con. Chạy ở bước 7b, nên Tỏa Sáng + Diệt Bóng cùng tick là một combo.
+- **Boss Chúa Bóng Mực**: xuất hiện ở giây 60 mỗi Đêm, HP 3/4/5. Đuổi Mây; Tỏa Sáng làm choáng 1.5 s, Diệt Bóng trừ 1 HP (+50), hạ boss +300. Hai skill luân phiên mỗi 12 s, báo trước 1.5 s và ngắt được bằng Tỏa Sáng: **Triệu Hồi** (gọi 2 Bóng Mực) và **Nhật Thực** (đèn trong 14 m mất 25 dầu, Mây trong 5 m bị đánh).
+- Event `banish`, `boss_spawned`, `boss_cast`, `boss_skill`, `boss_stunned`, `boss_hit`, `boss_defeated`. Snapshot có `banish_cd_s` và `boss` (chỉ khi bật extras). Scenario có `extras`, `random_boss`, `boss`, `player.banish_cd_ticks` (`io.js` kiểm tra; sai thì mã thoát 2).
+- Client: boss vẽ bằng mesh riêng (vương miện tím, mắt đỏ, xúc tu, vòng báo skill trên đất); thanh máu và thanh niệm trên HUD; mũi tên chỉ boss; hiệu ứng nổ khi diệt; âm thanh tổng hợp mới; chấm boss trên bản đồ nhỏ; phím Diệt Bóng đổi được trong Cài đặt.
+- **Chơi trên Android**:
+  - **điều khiển cảm ứng**: joystick nổi, kéo để xoay camera, 5 nút có vòng hồi chiêu, rung nhẹ khi bấm;
+  - UI gọn cho màn hình thấp;
+  - **PWA** (`manifest.webmanifest`, `/sw.js` để chơi offline, icon thường + maskable sinh bằng `scripts/make-icons.js`);
+  - **app Capacitor** `android-app/`: chạy offline, immersive, xoay ngang;
+  - workflow `android.yml` build APK debug trên GitHub Actions;
+  - server in thêm địa chỉ LAN để mở game từ điện thoại cùng Wi-Fi.
+- 12 case `tests/cases-extras.js` (X1–X12), kỳ vọng tính tay.
+- `scripts/screens.js`: kích thước màn hình riêng cho từng ảnh (ảnh điện thoại), thêm ảnh boss, Diệt Bóng và cảm ứng.
+
 ## [Unreleased] — nhánh `feature/shop-scenery` (tách từ `ui-upgrade`, không thuộc bài nộp)
 
 ### Sửa lỗi (đầu ra headless đổi ở trường hợp biên)
