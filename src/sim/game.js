@@ -1,4 +1,4 @@
-// Đảo Đèn Lồng — deterministic simulation core (no DOM, no Three.js), Test Contract v1.2.
+// Đảo Đèn Lồng — deterministic simulation core (no DOM, no Three.js), Test Contract v1.3.
 // Shared by the headless runner (src/headless.js) and the 3D client (web/main.js).
 // Numbers: game.contract.json (Ticket-02 standard values). Maps: ./maps.js. Assumptions: docs/notes/assumptions.md.
 // The 12 phases of step() follow the mandatory per-tick order of Ticket-02 (+ Ticket-03: fuel in phase 2, lantern_out right after).
@@ -11,8 +11,9 @@ export const TICK_HZ = 60;
 export const DT = 1 / TICK_HZ;
 const STEP_UP = 0.35;          // max ledge the player can walk up (ramps rise 0.05 m/tick)
 const STEP_DOWN = 0.35;        // grounded player snaps down to ground within this drop
-const SHADE_CLIMB = 0.5;
-const PLAYER_RADIUS = 0.4;     // only used against client-side decorative obstacles       // shades cannot climb a wall higher than this (they use ramps)
+const SHADE_CLIMB = 0.5;       // shades cannot climb a wall higher than this (they use ramps)
+const PLAYER_RADIUS = 0.4;     // only used against client-side decorative obstacles
+const EXPEL_STEP = Math.PI / 12; // safe-zone push: search the zone edge in 15° steps for open ground
 const DRIFTER_HOVER = 1.5;
 const SHADE_SPAWNING_TICKS = 30;
 const WANDER_SPEED = 1.5, WANDER_TURN_TICKS = 120;
@@ -449,27 +450,25 @@ export class Game {
     }
 
     // 6. safe zones: shades inside a just-lit zone are expelled to the edge within 30 ticks (harmless meanwhile)
+    //    The edge point is fixed when the push starts (expelTarget): never over the sea of clouds or inside the tower.
     const R = t.safe_radius;
     for (const L of newlyLit) {
-      for (const s of this.shades) if (distXZ(s.pos, L.pos) < R) s.expel = { c: L.pos, left: t.safe_expel_ticks };
+      for (const s of this.shades) if (distXZ(s.pos, L.pos) < R) s.expel = { to: this.expelTarget(s, L.pos), left: t.safe_expel_ticks };
     }
     // a shade found inside a lit zone any other way (e.g. placed there by a scenario) is expelled the same way
     for (const s of this.shades) {
       if (s.expel) continue;
       const L = this.lanterns.find((l) => this.hasZone(l) && distXZ(s.pos, l.pos) < R - 1e-9);
-      if (L) s.expel = { c: L.pos, left: t.safe_expel_ticks };
+      if (L) s.expel = { to: this.expelTarget(s, L.pos), left: t.safe_expel_ticks };
     }
     for (const s of this.shades) if (s.expel && s.state === 'drain') { s.state = 'wander'; s.drainId = null; }
     for (const s of this.shades) {
       if (!s.expel) continue;
-      const c = s.expel.c;
-      let ux = s.pos[0] - c[0], uz = s.pos[2] - c[2];
-      const d = Math.hypot(ux, uz);
-      if (d < 1e-9) { ux = s.pos[0] - p.pos[0]; uz = s.pos[2] - p.pos[2]; const n = Math.hypot(ux, uz); if (n < 1e-9) { ux = 1; uz = 0; } else { ux /= n; uz /= n; } }
-      else { ux /= d; uz /= d; }
-      const step = Math.max(0, R - d) / s.expel.left;
-      s.pos[0] += ux * step; s.pos[2] += uz * step;
-      if (--s.expel.left <= 0) s.expel = null;
+      const e = s.expel, k = 1 / e.left; // straight line, arrives exactly on the last push tick
+      s.pos[0] += (e.to[0] - s.pos[0]) * k; s.pos[2] += (e.to[1] - s.pos[2]) * k;
+      const g = this.ground(s.pos[0], s.pos[2]);
+      if (g !== null && g !== TOWER) s.pos[1] = g + SHADE_HOVER; // follow the terrain (tiers on Night 3)
+      if (--e.left <= 0) s.expel = null;
     }
 
     // 7. pulse (Tỏa Sáng): targets locked this tick, 3D distance from foot + 0.8 m to shade centre
@@ -650,6 +649,28 @@ export class Game {
 
     // 12. snapshot is written by the caller
     return end();
+  }
+
+  // Where a shade inside a lantern zone (centre c) is pushed to: the zone edge straight away from the lantern, as before,
+  // unless that spot is over the sea of clouds, inside the bell tower or inside another zone. Then the nearest open spot
+  // on the edge, trying ±15°, ±30°, … around the radial direction (+ before −). Nothing open → the radial spot.
+  expelTarget(s, c) {
+    const R = this.t.safe_radius, p = this.player.pos;
+    let ux = s.pos[0] - c[0], uz = s.pos[2] - c[2];
+    const d = Math.hypot(ux, uz);
+    if (d < 1e-9) { ux = s.pos[0] - p[0]; uz = s.pos[2] - p[2]; const n = Math.hypot(ux, uz); if (n < 1e-9) { ux = 1; uz = 0; } else { ux /= n; uz /= n; } }
+    else { ux /= d; uz /= d; }
+    const open = (x, z) => { const h = this.ground(x, z); return h !== null && h !== TOWER && !this.insideSafe(x, z); };
+    const radial = [c[0] + R * ux, c[2] + R * uz];
+    if (open(radial[0], radial[1])) return radial;
+    const a0 = Math.atan2(uz, ux);
+    for (let k = 1; k <= 12; k++) {
+      for (const sg of [1, -1]) {
+        const a = a0 + sg * k * EXPEL_STEP, x = c[0] + R * Math.cos(a), z = c[2] + R * Math.sin(a);
+        if (open(x, z)) return [x, z];
+      }
+    }
+    return radial;
   }
 
   pushOutOfObstacles(pos) {

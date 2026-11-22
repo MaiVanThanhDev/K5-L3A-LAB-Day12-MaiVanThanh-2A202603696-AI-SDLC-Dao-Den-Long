@@ -1,4 +1,4 @@
-// Parsing/validation of contract input files (Test Contract v1.2). Any problem -> FormatError (headless exits 2).
+// Parsing/validation of contract input files (Test Contract v1.3; input/scenario format unchanged since v1.2). Any problem -> FormatError (headless exits 2).
 import { FormatError } from './game.js';
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);

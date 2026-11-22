@@ -4,7 +4,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ROOT, TUNING, runHeadless, end } from './cases.js';
+import { ROOT, TUNING, runHeadless, end, snapAt } from './cases.js';
 import { validate, insert, isoWithOffset, MAX_ENTRIES } from '../src/leaderboard.js';
 import { Game } from '../src/sim/game.js';
 import { benchScenario, benchCamera } from '../src/sim/bench.js';
@@ -149,6 +149,35 @@ export const cases4 = [
       const none = go([], fwd);
       assert.ok(Math.abs(none[2] - 12) < 1e-6);
       return `cây chặn ở z=${blocked[2].toFixed(2)} (tính tay 4.1); lệch 0.2 m thì trượt qua (z=${slide[2].toFixed(1)}); nhảy qua đá thấp (z=${jump[2].toFixed(1)}); không có vật cản → 12 m như contract`;
+    },
+  },
+  {
+    id: 'R9', req: 'Đẩy Bóng Mực ra mép vùng an toàn không thả nó xuống biển mây hay vào tháp chuông: chỗ mép thẳng hướng ra bị chặn thì lấy chỗ mép trống gần nhất (bước 15°); độ cao bám theo địa hình',
+    run() {
+      // Night 3, player far away on tier 0; the push starts on tick 1 and lasts safe_expel_ticks = 30 → snapshot at tick 30.
+      // The shade is stunned (200 ticks, no push-back left): it does not walk after the push ends, so tick 30 = the edge point.
+      const base = { random_motes: false, random_shades: false, random_drifters: false, wind_enabled: false, motes: [], player: { pos: [0, 0, -20] } };
+      const at30 = (lantern, shade) => {
+        const r = runHeadless({ night: 3, ticks: 30, every: 30, scenario: { ...base, lanterns: [{ id: lantern, lit: true, fuel: 100 }], shades: [{ id: 'S1', pos: shade, state: 'stunned', state_ticks_left: 200 }] } });
+        assert.equal(r.code, 0, r.stderr);
+        return snapAt(r, 30).shades[0].pos;
+      };
+      const close = (got, want) => assert.ok(got.every((v, i) => Math.abs(v - want[i]) <= 0.002), `expected ${JSON.stringify(want)}, got ${JSON.stringify(got)}`);
+      // A. L6 (20,0,-35), shade at (21.49,1,-37.6): u = (1.49,−2.6)/2.9967, a0 = −60.18°. Radial edge (22.983,−40.206) has r 46.31 > 45 (sea).
+      //    Edge point at angle a: r² = 40.311² + 36 + 12·40.311·cos(a − (−60.26°)) ≤ 45² ⇔ cos ≤ 0.7525 ⇔ |a − a0| ≳ 41.2° → first step 45°, + first:
+      //    a = −15.18° → (20 + 6·0.96511, −35 − 6·0.26186) = (25.791, −36.571), r 44.75, ground 0 → y 1.
+      const a = at30('L6', [21.49, 1, -37.6]);
+      close(a, [25.791, 1, -36.571]);
+      // B. L1 (0,6,6), shade on tier 2 at (0,7,3): radial edge (0,0) is the tower; ±15° → (±1.553, 0.204), r 1.57 ≤ 2 tower too;
+      //    +30° → a = −60°: (6·0.5, 6 − 6·0.86603) = (3, 0.804), r 3.11 ≤ 8 → tier 2 ground 6 → y 7.
+      const b = at30('L1', [0, 7, 3]);
+      close(b, [3, 7, 0.804]);
+      // C. L2 (18,3,10), shade on tier 1 at (19,4,12) (r 22.5, z > 0 → ground 3): radial edge 18 + 6/√5 = 20.683, 10 + 12/√5 = 15.367,
+      //    r 25.77 > 24 → off tier 1; ramp 30°: along = 20.683·0.866 + 15.367·0.5 = 25.60, lateral = |20.683·0.5 − 15.367·0.866| = 2.97 > 1.5 → not
+      //    on the ramp → ground 0 → y 1 (the old push kept y 4, floating 3 m up).
+      const c = at30('L2', [19, 4, 12]);
+      close(c, [20.683, 1, 15.367]);
+      return `L6: (${a}) r=${Math.hypot(a[0], a[2]).toFixed(2)} ≤ 45 (trước đây 46.31, ngoài đảo); L1: (${b}) ngoài tháp; L2: (${c}) xuống tầng 0, y = 1`;
     },
   },
 ];

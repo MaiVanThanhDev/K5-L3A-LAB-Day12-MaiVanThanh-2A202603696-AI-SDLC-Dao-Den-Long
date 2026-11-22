@@ -32,3 +32,5 @@ Yêu cầu phi chức năng và phát hành. Mỗi mục có số đo hoặc che
 | P-4 | GitHub Release v1.0.0 có bản chạy được. | Release v1.0.0: zip (kèm three.js, chạy `node server.js`) + Dockerfile |
 | **6. Contract v1.3** | `contract_version: "1.3"`, `bench_cmd`, `soak_cmd`; v1.0–v1.2 giữ nguyên. | R1 + 62 case Phase 1–3 |
 | **7. Retro & demo** | Retro 1–2 trang; video .mp4 < 5 phút. | [docs/notes/retro.md](../notes/retro.md); video: **chưa có** (xem proof README) |
+| **8. Sau v1.0.0 (nhánh feature/shop-scenery)** | | |
+| X-1 | Đẩy Bóng Mực ra mép vùng an toàn không bao giờ thả nó xuống biển mây hay vào tháp chuông; độ cao bám theo địa hình (giả định D17). | R9 |

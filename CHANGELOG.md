@@ -2,6 +2,16 @@
 
 Ghi theo phase (tag git). Mục **BREAKING** liệt kê thay đổi phá vỡ tương thích với contract, scenario, output headless hoặc test của phase trước.
 
+## [Unreleased] — nhánh `feature/shop-scenery` (tách từ `ui-upgrade`, không thuộc bài nộp)
+
+### Sửa lỗi (đầu ra headless đổi ở trường hợp biên)
+
+| # | Thay đổi | Trước | Sau |
+|---|---|---|---|
+| F1 | Đẩy Bóng Mực ra mép vùng an toàn | Đẩy thẳng ra xa đèn, không xét địa hình: ở Đêm 3, Bóng Mực trong vùng L6/L7 bị thả ra biển mây (r 46.3 > 45), trong vùng L1 bị đẩy vào tháp chuông; độ cao giữ nguyên khi qua tầng | Chỗ mép thẳng hướng ra bị chặn thì lấy chỗ mép trống gần nhất (bước 15°); độ cao bám theo địa hình. Giả định D17, case R9. 70 case cũ không đổi. |
+
+- Comment `SHADE_CLIMB` bị dính vào dòng `PLAYER_RADIUS` được tách lại; header `headless.js`, `game.js`, `io.js` ghi Contract v1.3.
+
 ## [Unreleased] — nhánh `ui-upgrade` (sau v1.0.0, không thuộc bài nộp)
 
 Không đổi luật, số liệu, contract hay đầu ra headless (70/70 case; 69 case cũ không đổi). Bằng chứng: [docs/proof/ui-upgrade/](docs/proof/ui-upgrade/).
