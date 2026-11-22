@@ -43,6 +43,19 @@ DATABASE_URL=postgres://ddl:ddl@localhost:5433/ddl npm start
 - Test cửa hàng trên PostgreSQL thật: `SHOP_TEST_DATABASE_URL=postgres://ddl:ddl@localhost:5433/ddl npm test`.
 - API: `GET /api/shop/profile?name=` · `POST /api/shop/earn {name, run_id, score}` · `POST /api/shop/buy {name, item}` · `POST /api/shop/equip {name, item}`.
 
+### Deploy lên VPS
+
+- **VPS Windows** (Windows Server 2016+, không cần Docker): mở PowerShell bằng **Run as Administrator**:
+
+  ```powershell
+  Set-ExecutionPolicy -Scope Process Bypass -Force
+  Invoke-WebRequest https://raw.githubusercontent.com/MaiVanThanhDev/K5-L3A-LAB-Day12-MaiVanThanh-2A202603696-AI-SDLC-Dao-Den-Long/feature/boss-android/deploy/windows/install.ps1 -OutFile install.ps1
+  .\install.ps1 -Domain game.example.com   # chưa có tên miền: .\install.ps1  → http://<IP VPS>
+  ```
+
+  Script cài Node portable, code game, Caddy (HTTPS tự động) và tác vụ tự khởi động, rồi mở cổng 80/443. Chạy lại lệnh đó để cập nhật. Dữ liệu nằm ở `C:\ddl\data`.
+- **VPS Linux** (Docker): `cp deploy/env.example deploy/.env`, sửa `DOMAIN` và `POSTGRES_PASSWORD`, rồi `sh deploy/deploy.sh`. Stack gồm game, PostgreSQL và Caddy.
+
 ### Chơi trên điện thoại Android (nhánh `feature/boss-android`)
 
 Màn hình cảm ứng tự bật điều khiển cảm ứng: **joystick** ở nửa trái, **kéo** nửa phải để xoay camera, các nút **Nạp đèn · Diệt Bóng · Tỏa Sáng · Lướt · Nhảy**, nút ❚❚ để tạm dừng. Có ba cách chơi:
