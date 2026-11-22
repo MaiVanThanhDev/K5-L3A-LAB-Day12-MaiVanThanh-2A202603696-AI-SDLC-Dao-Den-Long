@@ -22,6 +22,7 @@ Mọi luật mới nằm sau cờ `extras`: client bật khi chơi, headless ch�
   - **PWA** (`manifest.webmanifest`, `/sw.js` để chơi offline, icon thường + maskable sinh bằng `scripts/make-icons.js`);
   - **app Capacitor** `android-app/`: chạy offline, immersive, xoay ngang;
   - workflow `android.yml` build APK debug trên GitHub Actions;
+  - APK được đăng công khai ở release `android-latest`; menu game có nút **Tải app Android** (route `/download/android`, ẩn khi đang ở trong app);
   - server in thêm địa chỉ LAN để mở game từ điện thoại cùng Wi-Fi.
 - 12 case `tests/cases-extras.js` (X1–X12), kỳ vọng tính tay.
 - `scripts/screens.js`: kích thước màn hình riêng cho từng ảnh (ảnh điện thoại), thêm ảnh boss, Diệt Bóng và cảm ứng.

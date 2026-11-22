@@ -141,8 +141,8 @@
     @keyframes pop { from { opacity: 0; transform: translateY(14px) scale(.97); } }
     body.reduced .screen, body.reduced .screen .card { animation: none; }
     .title { background: linear-gradient(180deg, #FFE9B0, #FFB347 55%, #F2C14E); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 18px rgba(255,179,71,.45)); }
-    button .ic { display: inline-flex; width: 1.1rem; height: 1.1rem; vertical-align: -0.18rem; margin-right: .4rem; }
-    button .ic svg { width: 100%; height: 100%; }
+    button .ic, a.btn-link .ic { display: inline-flex; width: 1.1rem; height: 1.1rem; vertical-align: -0.18rem; margin-right: .4rem; }
+    button .ic svg, a.btn-link .ic svg { width: 100%; height: 100%; }
     /* main menu */
     #scr-menu { background: linear-gradient(90deg, rgba(8,10,26,.88) 0%, rgba(8,10,26,.55) 45%, rgba(8,10,26,.15) 100%); justify-content: flex-start; gap: 3vw; padding: 0 5vw; box-sizing: border-box; }
     .menu-hero { max-width: 30rem; text-align: left; animation: pop .5s ease-out; }
@@ -202,6 +202,10 @@
     #hud-boss.stunned .bname::after { content: " · choáng!"; color: var(--core); }
     body.reduced #hud-boss .hp i { box-shadow: none; }
     #cd-banish { border-color: rgba(155, 92, 255, .8); }
+    /* "Tải app Android" (a link styled like the menu buttons) */
+    a.btn-link { display: inline-block; box-sizing: border-box; min-width: 15rem; padding: 10px 22px; border-radius: 10px; font-weight: 700; text-decoration: none; color: #0E1430; background: #A4C639; }
+    a.btn-link:hover, a.btn-link:focus-visible { filter: brightness(1.1); outline: 2px solid var(--core); outline-offset: 2px; }
+    body.touch a.btn-link { padding: 7px 18px; }
     body.boss-on #hud-msg { top: 10.6rem; }
 
     /* ======== touch controls (phones, Android app) ======== */
@@ -292,6 +296,7 @@
         <button id="btn-play"><span class="ic"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></span>Bắt đầu Đêm 1</button>
         <button class="ghost" id="btn-menu-shop"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9l2-5h12l2 5M4 9h16v11H4zM9 13a3 3 0 0 0 6 0"/></svg></span>Cửa hàng phụ kiện</button>
         <button class="ghost" id="btn-menu-lb"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H4v1a4 4 0 0 0 4 4M16 6h4v1a4 4 0 0 1-4 4M12 13v4M8 20h8"/></svg></span>Bảng xếp hạng</button>
+        <a class="btn-link hidden" id="btn-menu-apk" href="/download/android"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48l1.84-3.18a.38.38 0 0 0-.66-.38l-1.86 3.22a11.4 11.4 0 0 0-9.84 0L5.22 5.92a.38.38 0 0 0-.66.38L6.4 9.48A10.8 10.8 0 0 0 1 18h22a10.8 10.8 0 0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z"/></svg></span>Tải app Android</a>
         <button class="ghost" id="btn-menu-settings"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></span>Cài đặt</button>
       </div>
       <span class="chip-coins hidden" id="menu-coins"></span>

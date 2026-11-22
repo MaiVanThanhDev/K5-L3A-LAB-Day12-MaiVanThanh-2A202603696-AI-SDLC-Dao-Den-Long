@@ -63,6 +63,7 @@ Màn hình cảm ứng tự bật điều khiển cảm ứng: **joystick** ở 
 1. **Trình duyệt trên điện thoại, cùng Wi-Fi:** `npm start` in ra địa chỉ LAN (ví dụ `http://192.168.1.25:5173`). Mở địa chỉ đó bằng Chrome trên điện thoại. Nếu Windows hỏi tường lửa cho Node.js, chọn "Cho phép" với mạng riêng.
 2. **Cài như ứng dụng (PWA):** game có manifest và service worker (chơi offline). Mở bằng Chrome Android qua **HTTPS** (hoặc `localhost`), rồi chọn menu ⋮ → **Cài đặt ứng dụng**. Qua `http://<IP LAN>` thì chỉ chơi được trong trình duyệt, không cài được.
 3. **App APK (Capacitor, chạy offline, không cần server):** project ở [android-app/](android-app/).
+   - **Tải nhanh:** bấm **Tải app Android** ở menu game, hoặc tải [dao-den-long.apk](https://github.com/MaiVanThanhDev/K5-L3A-LAB-Day12-MaiVanThanh-2A202603696-AI-SDLC-Dao-Den-Long/releases/download/android-latest/dao-den-long.apk) từ release `android-latest` (workflow tự đăng bản mới sau mỗi lần build nhánh `feature/boss-android`, không cần đăng nhập). Server chuyển `/download/android` tới file đó (đổi bằng biến `APK_URL`). APK ký bằng khóa debug của từng lần build, nên nếu cài đè bị báo lỗi thì gỡ bản cũ trước.
    - **Không cần cài gì:** đẩy code lên GitHub, vào tab **Actions → android-apk** (hoặc bấm "Run workflow"), tải artifact `dao-den-long-apk` về, rồi cài `app-debug.apk` lên máy (cho phép "cài ứng dụng không rõ nguồn gốc").
    - **Build trên máy** (cần Android Studio hoặc Android SDK và JDK 21):
 

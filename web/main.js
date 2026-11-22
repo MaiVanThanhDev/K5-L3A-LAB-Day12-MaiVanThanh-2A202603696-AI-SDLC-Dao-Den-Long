@@ -1200,6 +1200,8 @@ renderNightCards();
 window.__showLeaderboard = showLeaderboard; window.__openSettings = () => openSettings('scr-menu'); window.__openShop = openShop;
 if (!BENCH) refreshProfile();
 if (TOUCH) setupTouch();
+// 'Tải app Android': only when served by our server (it owns /download/android), never inside the app, the bench or screenshots of the bench
+if (!BENCH && !window.Capacitor && location.protocol.startsWith('http')) $('btn-menu-apk').classList.remove('hidden');
 // installable app (PWA): offline cache via the service worker; skipped in the bench scene, screenshot runs and the Android app (files are local there)
 if (!BENCH && !CAM && !window.Capacitor && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('/sw.js').catch(() => {});
 if (params.has('autostart') || BENCH) { show(null); mode = 'playing'; $('hud').classList.remove('hidden'); }

@@ -23,6 +23,8 @@ const ALLOWED = ['web/', 'src/', 'node_modules/three/build/', 'tests/scenarios/'
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.webmanifest': 'application/manifest+json; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml' };
 // Installable app (PWA): the service worker must be served from the root so its scope covers the whole game.
+// 'Tải app Android' button: latest APK published by .github/workflows/android.yml on the public android-latest release.
+const APK_URL = process.env.APK_URL || 'https://github.com/MaiVanThanhDev/K5-L3A-LAB-Day12-MaiVanThanh-2A202603696-AI-SDLC-Dao-Den-Long/releases/download/android-latest/dao-den-long.apk';
 const ALIASES = { 'sw.js': 'web/sw.js', 'manifest.webmanifest': 'web/manifest.webmanifest' };
 
 const argv = process.argv.slice(2);
@@ -69,6 +71,7 @@ async function shopRoute(req, res, url) {
 createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname.startsWith('/api/shop/')) return shopRoute(req, res, url);
+  if (url.pathname === '/download/android') return res.writeHead(302, { location: APK_URL, 'cache-control': 'no-store' }).end();
   if (url.pathname === '/api/leaderboard') {
     if (req.method === 'GET') return json(res, 200, { entries: load(LB_FILE) });
     if (req.method === 'POST') {

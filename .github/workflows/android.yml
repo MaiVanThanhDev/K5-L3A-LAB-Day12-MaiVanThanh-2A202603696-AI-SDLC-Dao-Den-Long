@@ -1,10 +1,14 @@
 name: android-apk
-# Builds the Android app (Capacitor WebView around the 3D client) and uploads a debug APK as a workflow artifact.
+# Builds the Android app (Capacitor WebView around the 3D client), uploads the APK as a workflow artifact and, for
+# main / feature/boss-android, publishes it on the public pre-release "android-latest" (asset dao-den-long.apk), which
+# the game's "Tải app Android" button and the server route /download/android point to. No login needed to download.
 # GitHub's Ubuntu runners already have the Android SDK, so nothing has to be installed on a developer machine.
 on:
   workflow_dispatch:
   push:
     paths: ['web/**', 'src/sim/**', 'src/*-rules.js', 'game.contract.json', 'android-app/**', '.github/workflows/android.yml']
+permissions:
+  contents: write   # create / update the android-latest release
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -25,7 +29,23 @@ jobs:
       - name: Gradle assembleDebug
         working-directory: android-app/android
         run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - name: Rename APK
+        run: cp android-app/android/app/build/outputs/apk/debug/app-debug.apk dao-den-long.apk
       - uses: actions/upload-artifact@v4
         with:
           name: dao-den-long-apk
-          path: android-app/android/app/build/outputs/apk/debug/app-debug.apk
+          path: dao-den-long.apk
+      - name: Publish on the android-latest release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/boss-android'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="Bản Android mới nhất của Đảo Đèn Lồng (build tự động từ ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}).
+          Cài: tải dao-den-long.apk, mở file trên điện thoại, cho phép cài ứng dụng không rõ nguồn gốc.
+          Bản debug ký bằng khóa của từng lần build: nếu cài đè báo lỗi, gỡ bản cũ rồi cài lại."
+          if gh release view android-latest >/dev/null 2>&1; then
+            gh release edit android-latest --notes "$NOTES" --prerelease
+          else
+            gh release create android-latest --title "Android (mới nhất)" --notes "$NOTES" --prerelease --target "$GITHUB_SHA"
+          fi
+          gh release upload android-latest dao-den-long.apk --clobber
