@@ -1,0 +1,6 @@
+# DOMAIN = game.example.com → HTTPS certificate issued automatically (DNS A record must point at the VPS first).
+# DOMAIN = :80              → plain HTTP on the VPS IP (playable in a phone browser, but the PWA cannot be installed).
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy game:5173
+}
