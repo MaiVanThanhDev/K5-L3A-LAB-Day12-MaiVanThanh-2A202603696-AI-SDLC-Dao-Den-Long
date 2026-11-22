@@ -15,6 +15,8 @@ import { openStore, ShopError } from './src/shop-store.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 5173;
+// HOST=127.0.0.1 behind a reverse proxy (deploy/windows): only the proxy on the same machine can reach the game. Default: all interfaces.
+const HOST = process.env.HOST || undefined;
 const LB_FILE = resolve(process.env.LEADERBOARD_FILE || join(ROOT, 'data', 'leaderboard.json'));
 const SHOP_FILE = resolve(process.env.SHOP_FILE || join(ROOT, 'data', 'shop.json'));
 const ALLOWED = ['web/', 'src/', 'node_modules/three/build/', 'tests/scenarios/', 'game.contract.json'];
@@ -91,7 +93,7 @@ createServer(async (req, res) => {
     const body = await readFile(join(ROOT, rel));
     res.writeHead(200, { 'content-type': TYPES[extname(rel)] || 'application/octet-stream', 'cache-control': 'no-store' }).end(body);
   } catch { res.writeHead(404).end('not found'); }
-}).listen(PORT, () => {
+}).listen(PORT, HOST, () => {
   console.log(`Đảo Đèn Lồng đang chạy: http://localhost:${PORT}  (Ctrl+C để dừng)`);
   // phones on the same Wi-Fi can play in the browser (touch controls turn on by themselves)
   const lan = Object.values(networkInterfaces()).flat().filter((a) => a && a.family === 'IPv4' && !a.internal).map((a) => `http://${a.address}:${PORT}`);
